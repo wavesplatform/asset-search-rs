@@ -5,6 +5,9 @@ include:
   - project: 'we-private/backend/common-ci'
     ref: master
     file: 'ci-functions/deploy_stages.yml'
+  - project: 'we-private/backend/common-ci'
+    ref: master
+    file: 'ci-functions/migrations.yml'
 
 variables:
   APP_NAME: asset-search
