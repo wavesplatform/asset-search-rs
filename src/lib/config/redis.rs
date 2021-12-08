@@ -2,23 +2,23 @@ use serde::Deserialize;
 
 use crate::error::Error;
 
-fn default_redis_port() -> u16 {
+fn default_port() -> u16 {
     6379
 }
 
-fn default_redis_poolsize() -> u32 {
+fn default_poolsize() -> u32 {
     1
 }
 
 #[derive(Deserialize)]
 pub struct ConfigFlat {
-    pub redis_host: String,
-    #[serde(default = "default_redis_port")]
-    pub redis_port: u16,
-    pub redis_user: String,
-    pub redis_password: String,
-    #[serde(default = "default_redis_poolsize")]
-    pub redis_poolsize: u32,
+    pub host: String,
+    #[serde(default = "default_port")]
+    pub port: u16,
+    pub user: String,
+    pub password: String,
+    #[serde(default = "default_poolsize")]
+    pub poolsize: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -31,13 +31,13 @@ pub struct Config {
 }
 
 pub fn load() -> Result<Config, Error> {
-    let config_flat = envy::from_env::<ConfigFlat>()?;
+    let config_flat = envy::prefixed("REDIS__").from_env::<ConfigFlat>()?;
 
     Ok(Config {
-        host: config_flat.redis_host,
-        port: config_flat.redis_port,
-        user: config_flat.redis_user,
-        password: config_flat.redis_password,
-        poolsize: config_flat.redis_poolsize,
+        host: config_flat.host,
+        port: config_flat.port,
+        user: config_flat.user,
+        password: config_flat.password,
+        poolsize: config_flat.poolsize,
     })
 }

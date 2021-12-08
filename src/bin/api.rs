@@ -23,11 +23,11 @@ async fn main() -> Result<()> {
             Box::new(pg_repo),
             Box::new(assets_redis_cache),
             Box::new(assets_user_defined_data_redis_cache),
-            &config.app.oracle_address,
+            &config.app.waves_association_address,
         )
     };
 
-    let port = config.api.api_port;
+    let port = config.api.port;
 
     if config.api.bypass_images_service {
         info!("Bypassing Images service");

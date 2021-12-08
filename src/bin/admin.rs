@@ -24,7 +24,7 @@ async fn main() -> Result<()> {
             Box::new(pg_repo),
             Box::new(assets_redis_cache),
             Box::new(assets_user_defined_data_redis_cache),
-            &admin_config.app.oracle_address,
+            &admin_config.app.waves_association_address,
         )
     };
 
@@ -38,10 +38,10 @@ async fn main() -> Result<()> {
         )
     };
 
-    let port = admin_config.admin.api_port;
+    let port = admin_config.api.port;
     let api_key = admin_config.admin.api_key.to_owned();
 
-    if admin_config.admin.bypass_images_service {
+    if admin_config.api.bypass_images_service {
         info!("Bypassing Images service");
         admin::server::start(
             port,
@@ -54,7 +54,7 @@ async fn main() -> Result<()> {
     } else {
         let images_service = {
             let images_api_client =
-                api_clients::HttpClient::new(&admin_config.admin.images_service_base_url)?
+                api_clients::HttpClient::new(&admin_config.api.images_service_base_url)?
                     .with_user_agent("Asset search Service");
             app_lib::services::images::http::HttpService::new(images_api_client)
         };

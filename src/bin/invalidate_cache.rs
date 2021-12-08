@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
         cache::redis::new(redis_pool, ASSET_USER_DEFINED_DATA_KEY_PREFIX.to_owned());
 
     let assets_user_defined_data =
-        pg_repo.all_assets_user_defined_data(&config.app.oracle_address)?;
+        pg_repo.all_assets_user_defined_data(&config.app.waves_association_address)?;
 
     assets_user_defined_data
         .iter()

@@ -129,8 +129,6 @@ where
         .stream(starting_from_height, updates_per_request, max_duration)
         .await?;
 
-    let oracle_addresses = oracle_addresses;
-
     loop {
         let mut start = Instant::now();
 

@@ -4,18 +4,18 @@ use crate::error::Error;
 
 #[derive(Deserialize)]
 pub struct ConfigFlat {
-    pub oracle_address: String,
+    pub waves_association_address: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub oracle_address: String,
+    pub waves_association_address: String,
 }
 
 pub fn load() -> Result<Config, Error> {
-    let invalidate_config_flat = envy::from_env::<ConfigFlat>()?;
+    let app_config_flat = envy::from_env::<ConfigFlat>()?;
 
     Ok(Config {
-        oracle_address: invalidate_config_flat.oracle_address,
+        waves_association_address: app_config_flat.waves_association_address,
     })
 }
