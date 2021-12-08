@@ -559,7 +559,7 @@ fn extract_asset_updates(chain_id: u8, append: &BlockMicroblockAppend) -> Vec<As
                             time_stamp,
                             id: asset_id,
                             name: escape_unicode_null(&asset_details.name),
-                            description: asset_details.description.clone(),
+                            description: escape_unicode_null(&asset_details.description),
                             issuer: issuer,
                             precision: asset_details.decimals,
                             smart: asset_details
@@ -710,7 +710,9 @@ fn extract_data_entries_updates(
                             Value::BinaryValue(value) => DataEntryValue::BinVal(value.to_owned()),
                             Value::BoolValue(value) => DataEntryValue::BoolVal(value.to_owned()),
                             Value::IntValue(value) => DataEntryValue::IntVal(value.to_owned()),
-                            Value::StringValue(value) => DataEntryValue::StrVal(value.to_owned()),
+                            Value::StringValue(value) => {
+                                DataEntryValue::StrVal(escape_unicode_null(value))
+                            }
                         }),
                         related_asset_id,
                     })
@@ -1016,7 +1018,7 @@ fn extract_out_leasing_updates(append: &BlockMicroblockAppend) -> Vec<OutLeasing
     // at first, balance updates placed at append.state_update
     // at second, balance updates placed at append.txs[i].state_update
     // so balance updates from txs[i].state_update should override balance updates from append.state_update
-    
+
     append
         .state_update
         .leasing_for_address
@@ -1257,8 +1259,8 @@ fn rollback_out_leasings<R: repo::Repo>(repo: Arc<R>, block_uid: i64) -> Result<
     repo.reopen_out_leasings_superseded_by(&lowest_deleted_uids)
 }
 
-fn escape_unicode_null(name: &str) -> String {
-    name.replace("\0", "\\0")
+fn escape_unicode_null(s: &str) -> String {
+    s.replace("\0", "\\0")
 }
 
 fn parse_related_asset_id(key: &str) -> Option<String> {
@@ -1318,6 +1320,12 @@ impl From<&models::data_entry::DataEntryUpdate> for Option<AssetOracleDataEntry>
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn should_escape_unicode_null() {
+        assert!("asd\0".contains("\0"));
+        assert_eq!(super::escape_unicode_null("asd\0"), "asd\\0");
+    }
+
     #[test]
     fn should_parse_related_asset_id() {
         let test_cases = vec![

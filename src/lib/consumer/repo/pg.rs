@@ -3,20 +3,17 @@ use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel::sql_types::{Array, BigInt, VarChar};
 
-use super::Repo;
 use super::super::models::{
     asset::{AssetOverride, DeletedAsset, InsertableAsset},
-    block_microblock::BlockMicroblock, data_entry::{
-        DataEntryOverride, DeletedDataEntry, InsertableDataEntry,
-    },
+    block_microblock::BlockMicroblock,
+    data_entry::{DataEntryOverride, DeletedDataEntry, InsertableDataEntry},
     issuer_balance::{
         CurrentIssuerBalance, DeletedIssuerBalance, InsertableIssuerBalance, IssuerBalanceOverride,
     },
-    out_leasing::{
-        DeletedOutLeasing, InsertableOutLeasing, OutLeasingOverride,
-    },
+    out_leasing::{DeletedOutLeasing, InsertableOutLeasing, OutLeasingOverride},
 };
 use super::super::PrevHandledHeight;
+use super::Repo;
 use crate::error::Error as AppError;
 use crate::schema::{
     assets, assets_uid_seq, blocks_microblocks, data_entries, data_entries_uid_seq,
@@ -187,7 +184,7 @@ impl Repo for PgRepoImpl {
 
     fn update_assets_block_references(&self, block_uid: &i64) -> Result<()> {
         diesel::update(assets::table)
-            .set((assets::block_uid.eq(block_uid), ))
+            .set((assets::block_uid.eq(block_uid),))
             .filter(assets::block_uid.gt(block_uid))
             .execute(&self.conn)
             .map(|_| ())
@@ -234,12 +231,12 @@ impl Repo for PgRepoImpl {
             "select setval('assets_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
             new_uid
         ))
-            .execute(&self.conn)
-            .map(|_| ())
-            .map_err(|err| {
-                let context = format!("Cannot set assets next update uid: {}", err);
-                Error::new(AppError::DbDieselError(err)).context(context)
-            })
+        .execute(&self.conn)
+        .map(|_| ())
+        .map_err(|err| {
+            let context = format!("Cannot set assets next update uid: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
     }
 
     fn rollback_assets(&self, block_uid: &i64) -> Result<Vec<DeletedAsset>> {
@@ -293,7 +290,7 @@ impl Repo for PgRepoImpl {
 
     fn update_data_entries_block_references(&self, block_uid: &i64) -> Result<()> {
         diesel::update(data_entries::table)
-            .set((data_entries::block_uid.eq(block_uid), ))
+            .set((data_entries::block_uid.eq(block_uid),))
             .filter(data_entries::block_uid.gt(block_uid))
             .execute(&self.conn)
             .map(|_| ())
@@ -343,12 +340,12 @@ impl Repo for PgRepoImpl {
             "select setval('data_entries_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
             new_uid
         ))
-            .execute(&self.conn)
-            .map(|_| ())
-            .map_err(|err| {
-                let context = format!("Cannot set data entries next update uid: {}", err);
-                Error::new(AppError::DbDieselError(err)).context(context)
-            })
+        .execute(&self.conn)
+        .map(|_| ())
+        .map_err(|err| {
+            let context = format!("Cannot set data entries next update uid: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
     }
 
     fn rollback_data_entries(&self, block_uid: &i64) -> Result<Vec<DeletedDataEntry>> {
@@ -413,7 +410,7 @@ impl Repo for PgRepoImpl {
 
     fn update_issuer_balances_block_references(&self, block_uid: &i64) -> Result<()> {
         diesel::update(issuer_balances::table)
-            .set((issuer_balances::block_uid.eq(block_uid), ))
+            .set((issuer_balances::block_uid.eq(block_uid),))
             .filter(issuer_balances::block_uid.gt(block_uid))
             .execute(&self.conn)
             .map(|_| ())
@@ -463,12 +460,12 @@ impl Repo for PgRepoImpl {
             "select setval('issuer_balances_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
             new_uid
         ))
-            .execute(&self.conn)
-            .map(|_| ())
-            .map_err(|err| {
-                let context = format!("Cannot set issuer balances next uid: {}", err);
-                Error::new(AppError::DbDieselError(err)).context(context)
-            })
+        .execute(&self.conn)
+        .map(|_| ())
+        .map_err(|err| {
+            let context = format!("Cannot set issuer balances next uid: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
     }
 
     fn rollback_issuer_balances(&self, block_uid: &i64) -> Result<Vec<DeletedIssuerBalance>> {
@@ -522,7 +519,7 @@ impl Repo for PgRepoImpl {
 
     fn update_out_leasings_block_references(&self, block_uid: &i64) -> Result<()> {
         diesel::update(out_leasings::table)
-            .set((out_leasings::block_uid.eq(block_uid), ))
+            .set((out_leasings::block_uid.eq(block_uid),))
             .filter(out_leasings::block_uid.gt(block_uid))
             .execute(&self.conn)
             .map(|_| ())
@@ -569,12 +566,12 @@ impl Repo for PgRepoImpl {
             "select setval('out_leasings_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
             new_uid
         ))
-            .execute(&self.conn)
-            .map(|_| ())
-            .map_err(|err| {
-                let context = format!("Cannot set out leasings next uid: {}", err);
-                Error::new(AppError::DbDieselError(err)).context(context)
-            })
+        .execute(&self.conn)
+        .map(|_| ())
+        .map_err(|err| {
+            let context = format!("Cannot set out leasings next uid: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
     }
 
     fn rollback_out_leasings(&self, block_uid: &i64) -> Result<Vec<DeletedOutLeasing>> {
