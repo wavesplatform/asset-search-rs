@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
 
     let port = config.api.port;
 
-    if config.api.bypass_images_service {
+    if config.api.image_service_bypass {
         info!("Bypassing Images service");
         api::server::start(
             port,
@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
     } else {
         let images_service = {
             let images_api_client =
-                api_clients::HttpClient::new(&config.api.images_service_base_url)?
+                api_clients::HttpClient::new(&config.api.image_service_url)?
                     .with_user_agent("Asset search Service");
             app_lib::services::images::http::HttpService::new(images_api_client)
         };
