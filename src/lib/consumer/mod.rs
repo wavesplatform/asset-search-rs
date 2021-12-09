@@ -31,16 +31,18 @@ use self::models::issuer_balance::{
 use self::models::out_leasing::{
     DeletedOutLeasing, InsertableOutLeasing, OutLeasingOverride, OutLeasingUpdate,
 };
-use crate::cache::{AssetBlockchainData, SyncReadCache, SyncWriteCache};
+use crate::cache::{AssetBlockchainData, AssetUserDefinedData, SyncReadCache, SyncWriteCache};
 use crate::db::enums::DataEntryValueType;
 use crate::error::Error as AppError;
-use crate::models::{AssetInfoUpdate, AssetOracleDataEntry, DataEntryType};
+use crate::models::{AssetInfoUpdate, AssetLabel, AssetOracleDataEntry, DataEntryType};
 use crate::waves::{get_asset_id, is_waves_asset_id, Address, WAVES_ID};
 
 lazy_static! {
     static ref ASSET_ORACLE_DATA_ENTRY_KEY_REGEX: Regex =
         Regex::new(r"^.+_<([a-zA-Z\d]+)>$").unwrap();
 }
+
+const ASSET_ORACLE_VERIFICATION_STATUS_VERIFIED: i64 = 2;
 
 #[derive(Clone, Debug)]
 pub enum BlockchainUpdate {
@@ -86,6 +88,12 @@ enum UpdatesItem {
     Rollback(String),
 }
 
+#[derive(Debug)]
+enum AssetLabelUpdate {
+    SetLabel(AssetLabel),
+    DeleteLabel(AssetLabel),
+}
+
 #[async_trait::async_trait]
 pub trait UpdatesSource {
     async fn stream(
@@ -96,11 +104,12 @@ pub trait UpdatesSource {
     ) -> Result<Receiver<BlockchainUpdatesWithLastHeight>>;
 }
 
-pub async fn start<T, R, C>(
+pub async fn start<T, R, CBD, CUDD>(
     starting_height: u32,
     updates_src: T,
     repo: Arc<R>,
-    cache: C,
+    blockchain_data_cache: CBD,
+    user_defined_data_cache: CUDD,
     updates_per_request: usize,
     max_wait_time_in_secs: u64,
     chain_id: u8,
@@ -109,7 +118,8 @@ pub async fn start<T, R, C>(
 where
     T: UpdatesSource + Send + Sync + 'static,
     R: repo::Repo,
-    C: SyncReadCache<AssetBlockchainData> + SyncWriteCache<AssetBlockchainData> + Clone,
+    CBD: SyncReadCache<AssetBlockchainData> + SyncWriteCache<AssetBlockchainData> + Clone,
+    CUDD: SyncReadCache<AssetUserDefinedData> + SyncWriteCache<AssetUserDefinedData> + Clone,
 {
     let starting_from_height = match repo.get_prev_handled_height()? {
         Some(prev_handled_height) => {
@@ -151,7 +161,8 @@ where
             handle_updates(
                 updates_with_height,
                 repo.clone(),
-                cache.clone(),
+                blockchain_data_cache.clone(),
+                user_defined_data_cache.clone(),
                 chain_id,
                 &mut oracle_addresses.iter(),
             )?;
@@ -168,16 +179,18 @@ where
     }
 }
 
-fn handle_updates<'a, R, C, O>(
+fn handle_updates<'a, R, CBD, CUDD, O>(
     updates_with_height: BlockchainUpdatesWithLastHeight,
     repo: Arc<R>,
-    cache: C,
+    blockchain_data_cache: CBD,
+    user_defined_data_cache: CUDD,
     chain_id: u8,
     oracle_addresses: &mut O,
 ) -> Result<()>
 where
     R: repo::Repo,
-    C: SyncReadCache<AssetBlockchainData> + SyncWriteCache<AssetBlockchainData> + Clone,
+    CBD: SyncReadCache<AssetBlockchainData> + SyncWriteCache<AssetBlockchainData> + Clone,
+    CUDD: SyncReadCache<AssetUserDefinedData> + SyncWriteCache<AssetUserDefinedData> + Clone,
     O: Iterator<Item = &'a String>,
 {
     updates_with_height
@@ -220,7 +233,8 @@ where
                 squash_microblocks(repo.clone())?;
                 handle_appends(
                     repo.clone(),
-                    cache.clone(),
+                    blockchain_data_cache.clone(),
+                    user_defined_data_cache.clone(),
                     chain_id,
                     bs.as_ref(),
                     oracle_addresses,
@@ -228,12 +242,14 @@ where
             }
             UpdatesItem::Microblock(mba) => handle_appends(
                 repo.clone(),
-                cache.clone(),
+                blockchain_data_cache.clone(),
+                user_defined_data_cache.clone(),
                 chain_id,
                 &vec![mba.to_owned()],
                 oracle_addresses,
             ),
             UpdatesItem::Rollback(sig) => {
+                // TODO: invalidate caches
                 let block_uid = repo.clone().get_block_uid(&sig)?;
                 rollback(repo.clone(), block_uid)
             }
@@ -242,16 +258,18 @@ where
     Ok(())
 }
 
-fn handle_appends<'a, R, C, O>(
+fn handle_appends<'a, R, CBD, CUDD, O>(
     repo: Arc<R>,
-    cache: C,
+    blockchain_data_cache: CBD,
+    user_defined_data_cache: CUDD,
     chain_id: u8,
     appends: &Vec<BlockMicroblockAppend>,
     oracle_addresses: &mut O,
 ) -> Result<()>
 where
     R: repo::Repo,
-    C: SyncReadCache<AssetBlockchainData> + SyncWriteCache<AssetBlockchainData> + Clone,
+    CBD: SyncReadCache<AssetBlockchainData> + SyncWriteCache<AssetBlockchainData> + Clone,
+    CUDD: SyncReadCache<AssetUserDefinedData> + SyncWriteCache<AssetUserDefinedData> + Clone,
     O: Iterator<Item = &'a String>,
 {
     let block_uids = repo.insert_blocks_or_microblocks(
@@ -491,22 +509,51 @@ where
 
     assets_info_updates
         .iter()
-        .try_for_each::<_, Result<(), AppError>>(|(asset_id, (asset, asset_update))| match cache
-            .get(&asset_id)?
-        {
-            Some(cached) => {
-                let new_asset_blockchain_data = AssetBlockchainData::from((&cached, asset_update));
-                cache.set(&asset_id, new_asset_blockchain_data)?;
-                Ok(())
+        .try_for_each::<_, Result<(), AppError>>(|(asset_id, (asset, asset_update))| {
+            match blockchain_data_cache.get(&asset_id)? {
+                Some(cached) => {
+                    let new_asset_blockchain_data =
+                        AssetBlockchainData::from((&cached, asset_update));
+                    blockchain_data_cache.set(&asset_id, new_asset_blockchain_data)?;
+                }
+                _ => {
+                    let new_asset_blockchain_data =
+                        AssetBlockchainData::from((asset, asset_update));
+                    blockchain_data_cache.set(&asset_id, new_asset_blockchain_data)?;
+                }
             }
-            _ => {
-                let new_asset_blockchain_data = AssetBlockchainData::from((asset, asset_update));
-                cache.set(&asset_id, new_asset_blockchain_data)?;
-                Ok(())
-            }
-        })?;
 
-    // TODO: handle WA_VERIFIED label updates
+            let wa_verified_asset_label_update = asset_update
+                .oracles_data
+                .as_ref()
+                .and_then(|oracles_data| extract_wa_verified_asset_label_update(oracles_data));
+
+            if let Some(wa_verified_asset_label_update) = wa_verified_asset_label_update {
+                let current_asset_user_defined_data =
+                    match user_defined_data_cache.get(&asset_id)? {
+                        Some(cached) => cached,
+                        _ => AssetUserDefinedData {
+                            asset_id: asset_id.clone(),
+                            ticker: None,
+                            verification_status: crate::models::VerificationStatus::Unknown,
+                            labels: vec![],
+                        },
+                    };
+
+                let new_asset_user_defined_data = match wa_verified_asset_label_update {
+                    AssetLabelUpdate::SetLabel(label) => {
+                        current_asset_user_defined_data.add_label(&label)
+                    }
+                    AssetLabelUpdate::DeleteLabel(label) => {
+                        current_asset_user_defined_data.delete_label(&label)
+                    }
+                };
+
+                user_defined_data_cache.set(&asset_id, new_asset_user_defined_data)?;
+            }
+
+            Ok(())
+        })?;
 
     Ok(())
 }
@@ -1316,12 +1363,58 @@ impl From<&models::data_entry::DataEntryUpdate> for Option<AssetOracleDataEntry>
     }
 }
 
+fn is_asset_label_data_entry(key: &str, asset_id: &str) -> bool {
+    *key == format!("status_<{}>", asset_id)
+}
+
+/// Extracts AssetLabelUpdate for WaVerified
+///
+/// At this moment it should be WaVerified label only,
+/// but in the future it can be WaVerified | CommunityVerified labels depends on oracle address
+fn extract_wa_verified_asset_label_update(
+    oracles_data: &HashMap<String, Vec<AssetOracleDataEntry>>,
+) -> Option<AssetLabelUpdate> {
+    oracles_data.iter().fold(None, |_, (_oracle_address, des)| {
+        des.iter().fold(None, |_, de| {
+            if is_asset_label_data_entry(&de.key, &de.asset_id) {
+                match de.int_val {
+                    Some(verification_status) => {
+                        if verification_status == ASSET_ORACLE_VERIFICATION_STATUS_VERIFIED {
+                            // there is update, set new label
+                            Some(AssetLabelUpdate::SetLabel(AssetLabel::WaVerified))
+                        } else {
+                            // there is update, unset label
+                            Some(AssetLabelUpdate::DeleteLabel(AssetLabel::WaVerified))
+                        }
+                    }
+                    // there is no update
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        })
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
+    use crate::{
+        consumer::ASSET_ORACLE_VERIFICATION_STATUS_VERIFIED,
+        models::{AssetLabel, AssetOracleDataEntry, DataEntryType},
+    };
+
+    use super::{
+        escape_unicode_null, extract_wa_verified_asset_label_update, is_asset_label_data_entry,
+        parse_related_asset_id, AssetLabelUpdate,
+    };
+
     #[test]
     fn should_escape_unicode_null() {
         assert!("asd\0".contains("\0"));
-        assert_eq!(super::escape_unicode_null("asd\0"), "asd\\0");
+        assert_eq!(escape_unicode_null("asd\0"), "asd\\0");
     }
 
     #[test]
@@ -1339,8 +1432,105 @@ mod tests {
         ];
 
         test_cases.into_iter().for_each(|(key, expected)| {
-            let asset_id = super::parse_related_asset_id(key);
+            let asset_id = parse_related_asset_id(key);
             assert_eq!(asset_id, expected);
         });
+    }
+
+    #[test]
+    fn should_check_asset_label_data_entry() {
+        let asset_id = "asset_id";
+
+        let invalid_key = "asd";
+        assert!(!is_asset_label_data_entry(invalid_key, asset_id));
+
+        let valid_key = format!("status_<{}>", asset_id);
+        assert!(is_asset_label_data_entry(&valid_key, asset_id));
+    }
+
+    #[test]
+    fn should_extract_asset_label_update() {
+        let asset_id = "asset_id".to_owned();
+        let oracle_address = "oracle_address".to_owned();
+
+        let set_label_de = AssetOracleDataEntry {
+            asset_id: asset_id.clone(),
+            oracle_address: oracle_address.clone(),
+            key: format!("status_<{}>", asset_id),
+            data_type: DataEntryType::Int,
+            bin_val: None,
+            bool_val: None,
+            int_val: Some(ASSET_ORACLE_VERIFICATION_STATUS_VERIFIED),
+            str_val: None,
+        };
+
+        let reset_label_de = AssetOracleDataEntry {
+            asset_id: asset_id.clone(),
+            oracle_address: oracle_address.clone(),
+            key: format!("status_<{}>", asset_id),
+            data_type: DataEntryType::Int,
+            bin_val: None,
+            bool_val: None,
+            int_val: Some(3),
+            str_val: None,
+        };
+
+        let empty_de = AssetOracleDataEntry {
+            asset_id: asset_id.clone(),
+            oracle_address: oracle_address.clone(),
+            key: "bool".to_owned(),
+            data_type: DataEntryType::Bool,
+            bin_val: None,
+            bool_val: Some(true),
+            int_val: None,
+            str_val: None,
+        };
+
+        // will set label
+        let oracles_data = vec![(
+            oracle_address.clone(),
+            vec![
+                empty_de.clone(),
+                reset_label_de.clone(),
+                set_label_de.clone(),
+            ],
+        )]
+        .into_iter()
+        .collect::<HashMap<String, Vec<AssetOracleDataEntry>>>();
+
+        assert!(matches!(
+            extract_wa_verified_asset_label_update(&oracles_data),
+            Some(AssetLabelUpdate::SetLabel(AssetLabel::WaVerified))
+        ));
+
+        // will not set label
+        let oracles_data = vec![(
+            oracle_address.clone(),
+            vec![
+                empty_de.clone(),
+                set_label_de.clone(),
+                reset_label_de.clone(),
+            ],
+        )]
+        .into_iter()
+        .collect::<HashMap<String, Vec<AssetOracleDataEntry>>>();
+
+        assert!(matches!(
+            extract_wa_verified_asset_label_update(&oracles_data),
+            Some(AssetLabelUpdate::DeleteLabel(AssetLabel::WaVerified))
+        ));
+
+        // there is no label update
+        let oracles_data = vec![(
+            oracle_address.clone(),
+            vec![empty_de.clone(), empty_de.clone(), empty_de],
+        )]
+        .into_iter()
+        .collect::<HashMap<String, Vec<AssetOracleDataEntry>>>();
+
+        assert!(matches!(
+            extract_wa_verified_asset_label_update(&oracles_data),
+            None
+        ));
     }
 }

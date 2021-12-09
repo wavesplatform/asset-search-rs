@@ -2,7 +2,7 @@ pub mod redis;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::error::Error as AppError;
 use crate::models::{
@@ -36,6 +36,38 @@ pub struct AssetUserDefinedData {
     pub ticker: Option<String>,
     pub verification_status: VerificationStatus,
     pub labels: Vec<AssetLabel>,
+}
+
+impl AssetUserDefinedData {
+    pub fn add_label(&self, label: &AssetLabel) -> Self {
+        let mut labels = self.labels.iter().fold(HashSet::new(), |mut acc, cur| {
+            acc.insert(cur.to_owned());
+            acc
+        });
+        labels.insert(label.to_owned());
+
+        Self {
+            asset_id: self.asset_id.clone(),
+            ticker: self.ticker.clone(),
+            verification_status: self.verification_status.clone(),
+            labels: labels.into_iter().collect::<Vec<_>>(),
+        }
+    }
+
+    pub fn delete_label(&self, label: &AssetLabel) -> Self {
+        let labels = self
+            .labels
+            .iter()
+            .filter_map(|l| if l == label { None } else { Some(l.to_owned()) })
+            .collect::<Vec<_>>();
+
+        Self {
+            asset_id: self.asset_id.clone(),
+            ticker: self.ticker.clone(),
+            verification_status: self.verification_status.clone(),
+            labels,
+        }
+    }
 }
 
 impl From<(&AssetBlockchainData, &AssetUserDefinedData)> for AssetInfo {
@@ -119,4 +151,36 @@ pub trait SyncReadCache<T>: CacheKeyFn {
 
 pub trait SyncWriteCache<T>: SyncReadCache<T> {
     fn set(&self, key: &str, value: T) -> Result<(), AppError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AssetUserDefinedData;
+    use crate::models::{AssetLabel, VerificationStatus};
+
+    #[test]
+    fn should_add_label() {
+        let udd = AssetUserDefinedData {
+            asset_id: "asset_id".to_owned(),
+            ticker: None,
+            verification_status: VerificationStatus::Unknown,
+            labels: vec![],
+        };
+
+        let udd_with_new_label = udd.add_label(&AssetLabel::WaVerified);
+        assert_eq!(udd_with_new_label.labels, vec![AssetLabel::WaVerified]);
+    }
+
+    #[test]
+    fn should_delete_label() {
+        let udd = AssetUserDefinedData {
+            asset_id: "asset_id".to_owned(),
+            ticker: None,
+            verification_status: VerificationStatus::Unknown,
+            labels: vec![AssetLabel::WaVerified],
+        };
+
+        let udd_with_new_label = udd.delete_label(&AssetLabel::WaVerified);
+        assert_eq!(udd_with_new_label.labels, vec![]);
+    }
 }
