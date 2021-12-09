@@ -507,13 +507,45 @@ where
                 });
         });
 
+    let assets_info_updates_ids = assets_info_updates
+        .keys()
+        .map(|s| s.as_str())
+        .collect::<Vec<&str>>();
+
+    let cached_blochain_data = blockchain_data_cache
+        .mget(&assets_info_updates_ids)?
+        .into_iter()
+        .zip(&assets_info_updates_ids)
+        .fold(
+            HashMap::with_capacity(assets_info_updates_ids.len()),
+            |mut acc, (o, asset_id)| {
+                acc.insert(asset_id.to_owned(), o);
+                acc
+            },
+        );
+
+    let cached_user_defined_data = user_defined_data_cache
+        .mget(&assets_info_updates_ids)?
+        .into_iter()
+        .zip(&assets_info_updates_ids)
+        .fold(
+            HashMap::with_capacity(assets_info_updates_ids.len()),
+            |mut acc, (o, asset_id)| {
+                acc.insert(asset_id.to_owned(), o);
+                acc
+            },
+        );
+
     assets_info_updates
         .iter()
         .try_for_each::<_, Result<(), AppError>>(|(asset_id, (asset, asset_update))| {
-            match blockchain_data_cache.get(&asset_id)? {
+            match cached_blochain_data
+                .get(asset_id.as_str())
+                .and_then(|o| o.as_ref())
+            {
                 Some(cached) => {
                     let new_asset_blockchain_data =
-                        AssetBlockchainData::from((&cached, asset_update));
+                        AssetBlockchainData::from((cached, asset_update));
                     blockchain_data_cache.set(&asset_id, new_asset_blockchain_data)?;
                 }
                 _ => {
@@ -529,16 +561,18 @@ where
                 .and_then(|oracles_data| extract_wa_verified_asset_label_update(oracles_data));
 
             if let Some(wa_verified_asset_label_update) = wa_verified_asset_label_update {
-                let current_asset_user_defined_data =
-                    match user_defined_data_cache.get(&asset_id)? {
-                        Some(cached) => cached,
-                        _ => AssetUserDefinedData {
-                            asset_id: asset_id.clone(),
-                            ticker: None,
-                            verification_status: crate::models::VerificationStatus::Unknown,
-                            labels: vec![],
-                        },
-                    };
+                let current_asset_user_defined_data = match cached_user_defined_data
+                    .get(asset_id.as_str())
+                    .and_then(|o| o.clone())
+                {
+                    Some(cached) => cached,
+                    _ => AssetUserDefinedData {
+                        asset_id: asset_id.clone(),
+                        ticker: None,
+                        verification_status: crate::models::VerificationStatus::Unknown,
+                        labels: vec![],
+                    },
+                };
 
                 let new_asset_user_defined_data = match wa_verified_asset_label_update {
                     AssetLabelUpdate::SetLabel(label) => {
