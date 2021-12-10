@@ -15,7 +15,6 @@ async fn main() -> Result<()> {
         config.consumer
     );
 
-    debug!("postgres config: {:?}", config.postgres);
     let conn = db::unpooled(&config.postgres)?;
 
     let updates_src = consumer::updates::new(&config.consumer.blockchain_updates_url).await?;

@@ -23,6 +23,7 @@ use waves_protobuf_schemas::waves::{
     Block as BlockPB, SignedMicroBlock as SignedMicroBlockPB,
     SignedTransaction as SignedTransactionPB,
 };
+use wavesexchange_log::error;
 
 use super::{
     BlockMicroblockAppend, BlockchainUpdate, BlockchainUpdatesWithLastHeight, Tx, UpdatesSource,
@@ -63,16 +64,16 @@ impl UpdatesSource for UpdatesSourceImpl {
 
         let (tx, rx) = channel::<BlockchainUpdatesWithLastHeight>(batch_max_size);
 
-        let handle = tokio::spawn(async move {
-            self.run(stream, tx, from_height, batch_max_size, batch_max_wait_time)
-                .await
+        tokio::spawn(async move {
+            let r = self
+                .run(stream, tx, from_height, batch_max_size, batch_max_wait_time)
+                .await;
+            if let Err(e) = r {
+                error!("updates source stopped with error: {:?}", e);
+            }
         });
 
-        if let Err(e) = handle.await.map_err(|e| AppError::JoinError(e))? {
-            Err(e)
-        } else {
-            Ok(rx)
-        }
+        Ok(rx)
     }
 }
 
