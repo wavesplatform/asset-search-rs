@@ -47,7 +47,7 @@ impl UpdatesSource for UpdatesSourceImpl {
         from_height: u32,
         batch_max_size: usize,
         batch_max_wait_time: Duration,
-    ) -> Result<Receiver<BlockchainUpdatesWithLastHeight>> {
+    ) -> Result<Receiver<BlockchainUpdatesWithLastHeight>, AppError> {
         let request = tonic::Request::new(SubscribeRequestPB {
             from_height: from_height as i32,
             to_height: 0,
@@ -57,17 +57,22 @@ impl UpdatesSource for UpdatesSourceImpl {
             .grpc_client
             .clone()
             .subscribe(request)
-            .await?
+            .await
+            .map_err(|e| AppError::StreamError(format!("Subscribe Stream error: {}", e)))?
             .into_inner();
 
         let (tx, rx) = channel::<BlockchainUpdatesWithLastHeight>(batch_max_size);
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             self.run(stream, tx, from_height, batch_max_size, batch_max_wait_time)
                 .await
         });
 
-        Ok(rx)
+        if let Err(e) = handle.await.map_err(|e| AppError::JoinError(e))? {
+            Err(e)
+        } else {
+            Ok(rx)
+        }
     }
 }
 
@@ -79,7 +84,7 @@ impl UpdatesSourceImpl {
         from_height: u32,
         batch_max_size: usize,
         batch_max_wait_time: Duration,
-    ) -> Result<()> {
+    ) -> Result<(), AppError> {
         let mut result = vec![];
         let mut last_height = from_height;
 
@@ -91,7 +96,10 @@ impl UpdatesSourceImpl {
         loop {
             if let Some(SubscribeEventPB {
                 update: Some(update),
-            }) = stream.message().await?
+            }) = stream
+                .message()
+                .await
+                .map_err(|s| AppError::StreamError(s.to_string()))?
             {
                 last_height = update.height as u32;
                 match BlockchainUpdate::try_from(update) {
@@ -119,7 +127,8 @@ impl UpdatesSourceImpl {
                     last_height,
                     updates: result.clone(),
                 })
-                .await?;
+                .await
+                .map_err(|e| AppError::StreamError(e.to_string()))?;
                 should_receive_more = true;
                 start = Instant::now();
                 result.clear();

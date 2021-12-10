@@ -4,7 +4,7 @@ use app_lib::{
     config, consumer, db, redis,
 };
 use std::sync::Arc;
-use wavesexchange_log::{error, info};
+use wavesexchange_log::{error, info, debug};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -15,6 +15,7 @@ async fn main() -> Result<()> {
         config.consumer
     );
 
+    debug!("postgres config: {:?}", config.postgres);
     let conn = db::unpooled(&config.postgres)?;
 
     let updates_src = consumer::updates::new(&config.consumer.blockchain_updates_url).await?;

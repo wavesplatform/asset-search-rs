@@ -67,7 +67,9 @@ CREATE TYPE asset_wx_label_value_type AS ENUM (
     'defi',
     'gateway',
     'stablecoin',
-    'qualified'
+    'qualified',
+    'wa_verified',
+    'community_verified'
 );
 
 CREATE TABLE IF NOT EXISTS asset_wx_labels (

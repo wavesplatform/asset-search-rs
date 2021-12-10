@@ -151,8 +151,8 @@ impl Repo for PgRepo {
             );
         }
 
-        let q =
-            sql_query(format!("{} ORDER BY a.rn LIMIT $1", query)).bind::<BigInt, _>(params.limit);
+        let q = sql_query(format!("{} ORDER BY a.rn LIMIT $1", query))
+            .bind::<Integer, _>(params.limit as i32);
 
         q.load(&self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
@@ -174,15 +174,11 @@ impl Repo for PgRepo {
                 a.reissuable,
                 a.min_sponsored_fee,
                 a.smart,
-                pv.ticker                                                                                                              AS ticker,
-                COALESCE(pv.verification_status, $1)                                                                                        AS verification_status,
-                COALESCE(awl.wx_labels, CASE WHEN wa_label.verification_status = 2 THEN ARRAY['WA_VERIFIED'] ELSE ARRAY[]::text[] END) AS labels,
-                CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE (ib.regular_balance + COALESCE(ol.amount, 0)) END                 AS sponsor_balance
+                CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ib.regular_balance END AS sponsor_regular_balance,
+                CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ol.amount END          AS sponsor_out_leasing
             FROM assets AS a
             LEFT JOIN blocks_microblocks bm ON a.block_uid = bm.uid
             LEFT JOIN predefined_verifications pv ON a.id = pv.asset_id
-            LEFT JOIN (SELECT asset_id, array_agg(label::text) AS wx_labels FROM asset_wx_labels GROUP BY asset_id) AS awl ON awl.asset_id = a.id
-            LEFT JOIN (SELECT int_val as verification_status, related_asset_id, key FROM data_entries WHERE address = '$2') AS wa_label ON wa_label.related_asset_id = a.id AND wa_label.key = 'status_<' || a.id || '>'
             LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = $3
             LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = $3
             WHERE a.superseded_by = $3 AND a.id = $4
@@ -213,15 +209,10 @@ impl Repo for PgRepo {
                 a.reissuable,
                 a.min_sponsored_fee,
                 a.smart,
-                pv.ticker                                                                                                              AS ticker,
-                COALESCE(pv.verification_status, $1)                                                                                        AS verification_status,
-                COALESCE(awl.wx_labels, CASE WHEN wa_label.verification_status = 2 THEN ARRAY['WA_VERIFIED'] ELSE ARRAY[]::text[] END) AS labels,
-                CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE (ib.regular_balance + COALESCE(ol.amount, 0)) END                 AS sponsor_balance
+                CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ib.regular_balance END AS sponsor_regular_balance,
+                CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ol.amount END          AS sponsor_out_leasing
             FROM assets AS a
             LEFT JOIN blocks_microblocks bm ON a.block_uid = bm.uid
-            LEFT JOIN predefined_verifications pv ON a.id = pv.asset_id
-            LEFT JOIN (SELECT asset_id, array_agg(label::text) AS wx_labels FROM asset_wx_labels GROUP BY asset_id) AS awl ON awl.asset_id = a.id
-            LEFT JOIN (SELECT int_val as verification_status, related_asset_id, key FROM data_entries WHERE address = '$2') AS wa_label ON wa_label.related_asset_id = a.id AND wa_label.key = 'status_<' || a.id || '>'
             LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = $3
             LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = $3
             WHERE a.superseded_by = $3 AND a.id = ANY($4)
@@ -256,15 +247,10 @@ impl Repo for PgRepo {
                 a.reissuable,
                 a.min_sponsored_fee,
                 a.smart,
-                pv.ticker                                                                                                              AS ticker,
-                COALESCE(pv.verification_status, 'unknown')                                                                                        AS verification_status,
-                COALESCE(awl.wx_labels, CASE WHEN wa_label.verification_status = 2 THEN ARRAY['WA_VERIFIED'] ELSE ARRAY[]::text[] END) AS labels,
-                CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE (ib.regular_balance + COALESCE(ol.amount, 0)) END                 AS sponsor_balance
+                CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ib.regular_balance END AS sponsor_regular_balance,
+                CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ol.amount END          AS sponsor_out_leasing
             FROM assets AS a
             LEFT JOIN blocks_microblocks bm ON a.block_uid = bm.uid
-            LEFT JOIN predefined_verifications pv ON a.id = pv.asset_id
-            LEFT JOIN (SELECT asset_id, array_agg(label::text) AS wx_labels FROM asset_wx_labels GROUP BY asset_id) AS awl ON awl.asset_id = a.id
-            LEFT JOIN (SELECT int_val as verification_status, related_asset_id, key FROM data_entries WHERE address = '$1') AS wa_label ON wa_label.related_asset_id = a.id AND wa_label.key = 'status_<' || a.id || '>'
             LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = $2
             LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = $2
             WHERE a.id = ANY($3) AND a.block_uid <= (SELECT uid FROM blocks_microblocks WHERE height = $4 LIMIT 1)
@@ -316,8 +302,8 @@ impl Repo for PgRepo {
             SELECT 
                 a.id,
                 pv.ticker,
-                COALESCE(pv.verification_status, 'unknown'::verification_status_value_type) AS verification_status,
-                COALESCE(awl.wx_labels, CASE WHEN wa_label.verification_status = 2 THEN ARRAY['WA_VERIFIED'] ELSE ARRAY[]::text[] END) AS labels
+                COALESCE(pv.verification_status, 'unknown'::verification_status_value_type)                                            AS verification_status,
+                COALESCE(awl.wx_labels, CASE WHEN wa_label.verification_status = 2 THEN ARRAY['wa_verified'] ELSE ARRAY[]::text[] END) AS labels
             FROM assets a
             LEFT JOIN predefined_verifications pv ON a.id = pv.asset_id
             LEFT JOIN (SELECT asset_id, array_agg(label::text) AS wx_labels FROM asset_wx_labels GROUP BY asset_id) AS awl ON awl.asset_id = a.id
@@ -344,8 +330,8 @@ impl Repo for PgRepo {
             SELECT 
                 a.id as asset_id,
                 pv.ticker,
-                COALESCE(pv.verification_status, 'unknown'::verification_status_value_type) AS verification_status,
-                COALESCE(awl.wx_labels, CASE WHEN wa_label.verification_status = 2 THEN ARRAY['WA_VERIFIED'] ELSE ARRAY[]::text[] END) AS labels
+                COALESCE(pv.verification_status, 'unknown'::verification_status_value_type)                                            AS verification_status,
+                COALESCE(awl.wx_labels, CASE WHEN wa_label.verification_status = 2 THEN ARRAY['wa_verified'] ELSE ARRAY[]::text[] END) AS labels
             FROM assets a
             LEFT JOIN predefined_verifications pv ON a.id = pv.asset_id
             LEFT JOIN (SELECT asset_id, array_agg(label::text) AS wx_labels FROM asset_wx_labels GROUP BY asset_id) AS awl ON awl.asset_id = a.id
@@ -370,8 +356,8 @@ impl Repo for PgRepo {
             SELECT 
                 a.id as asset_id,
                 pv.ticker,
-                COALESCE(pv.verification_status, 'unknown'::verification_status_value_type) AS verification_status,
-                COALESCE(awl.wx_labels, CASE WHEN wa_label.verification_status = 2 THEN ARRAY['WA_VERIFIED'] ELSE ARRAY[]::text[] END) AS labels
+                COALESCE(pv.verification_status, 'unknown'::verification_status_value_type)                                            AS verification_status,
+                COALESCE(awl.wx_labels, CASE WHEN wa_label.verification_status = 2 THEN ARRAY['wa_verified'] ELSE ARRAY[]::text[] END) AS labels
             FROM assets a
             LEFT JOIN predefined_verifications pv ON a.id = pv.asset_id
             LEFT JOIN (SELECT asset_id, array_agg(label::text) AS wx_labels FROM asset_wx_labels GROUP BY asset_id) AS awl ON awl.asset_id = a.id

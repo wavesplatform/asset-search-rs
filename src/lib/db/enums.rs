@@ -9,6 +9,8 @@ pub enum AssetWxLabelValueType {
     Gateway,
     Stablecoin,
     Qualified,
+    WaVerified,
+    CommunityVerified,
 }
 
 #[derive(DbEnum, Clone, Debug)]

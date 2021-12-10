@@ -23,7 +23,7 @@ futures = "0.3"
 itertools = "0.10"
 lazy_static = "1.4"
 percent-encoding = "2.1"
-prost = { version = "0.9", features = ["no-recursion-limit"] }
+prost = { version = "0.8", features = ["no-recursion-limit"] }
 r2d2 = "0.8"
 redis = { version = "0.21.3", features = ["tokio", "r2d2"] }
 regex = "1"

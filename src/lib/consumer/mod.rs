@@ -101,7 +101,7 @@ pub trait UpdatesSource {
         from_height: u32,
         batch_max_size: usize,
         batch_max_time: Duration,
-    ) -> Result<Receiver<BlockchainUpdatesWithLastHeight>>;
+    ) -> Result<Receiver<BlockchainUpdatesWithLastHeight>, AppError>;
 }
 
 pub async fn start<T, R, CBD, CUDD>(

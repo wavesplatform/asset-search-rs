@@ -2,6 +2,8 @@ use serde::Deserialize;
 
 use crate::models::{AssetLabel, VerificationStatus};
 
+use super::DEFAULT_LIMIT;
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct SearchRequest {
     pub ids: Option<Vec<String>>,
@@ -11,7 +13,7 @@ pub struct SearchRequest {
     pub verified_status: Option<Vec<VerificationStatus>>,
     #[serde(rename = "label__in")]
     pub asset_label_in: Option<Vec<AssetLabel>>,
-    pub limit: Option<i64>,
+    pub limit: Option<u32>,
     pub after: Option<String>,
 }
 
@@ -24,7 +26,7 @@ impl From<SearchRequest> for crate::services::assets::SearchRequest {
             smart: sr.smart,
             verification_status_in: sr.verified_status,
             asset_label_in: sr.asset_label_in,
-            limit: sr.limit,
+            limit: sr.limit.unwrap_or(DEFAULT_LIMIT),
             after: sr.after,
         }
     }

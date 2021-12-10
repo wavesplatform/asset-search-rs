@@ -182,6 +182,8 @@ impl From<&AssetWxLabelValueType> for AssetLabel {
             AssetWxLabelValueType::Gateway => Self::Gateway,
             AssetWxLabelValueType::Stablecoin => Self::Stablecoin,
             AssetWxLabelValueType::Qualified => Self::Qualified,
+            AssetWxLabelValueType::WaVerified => Self::WaVerified,
+            AssetWxLabelValueType::CommunityVerified => Self::CommunityVerified,
         }
     }
 }
@@ -195,6 +197,8 @@ impl TryFrom<&AssetLabel> for AssetWxLabelValueType {
             AssetLabel::Gateway => Ok(Self::Gateway),
             AssetLabel::Stablecoin => Ok(Self::Stablecoin),
             AssetLabel::Qualified => Ok(Self::Qualified),
+            AssetLabel::WaVerified => Ok(Self::WaVerified),
+            AssetLabel::CommunityVerified => Ok(Self::CommunityVerified),
             _ => Err(AppError::ValidationError(
                 format!(
                     "Error occurred while parsing AssetWxLabelValueType from AssetLabel {}",

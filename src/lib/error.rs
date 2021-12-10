@@ -22,6 +22,8 @@ pub enum Error {
     ValidationError(String, Option<std::collections::HashMap<String, String>>),
     #[error("StreamClosed: {0}")]
     StreamClosed(String),
+    #[error("StreamError: {0}")]
+    StreamError(String),
     #[error("ConsistencyError: {0}")]
     ConsistencyError(String),
     #[error("UpstreamAPIBadResponse: {0}")]
@@ -40,6 +42,8 @@ pub enum Error {
     Unauthorized(String),
     #[error("InvalidVariant: {0}")]
     InvalidVariant(String),
+    #[error("JoinError: {0}")]
+    JoinError(#[from] tokio::task::JoinError),
 }
 
 impl Reject for Error {}

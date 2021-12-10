@@ -315,7 +315,7 @@ impl Service for AssetsService {
             verification_status_in: req.verification_status_in.clone(),
             asset_label_in: req.asset_label_in.clone(),
             after: req.after.clone(),
-            limit: req.limit.unwrap_or(100),
+            limit: req.limit,
         };
 
         self.repo.find(find_params).map(|asset_ids| {

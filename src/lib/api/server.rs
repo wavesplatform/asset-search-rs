@@ -10,11 +10,9 @@ use wavesexchange_warp::pagination::{List, PageInfo};
 
 use super::dtos::{MgetRequest, RequestOptions, SearchRequest};
 use super::models::Asset;
-use crate::services;
+use super::{DEFAULT_LIMIT, ERROR_CODES_PREFIX};
 use crate::error;
-
-const ERROR_CODES_PREFIX: u16 = 95;
-// const DEFAULT_LIMIT: u32 = 100;
+use crate::services;
 
 pub async fn start(
     port: u16,
@@ -41,11 +39,11 @@ pub async fn start(
             )
         }
         error::Error::DbDieselError(error_message)
-        if error_message.to_string() == "canceling statement due to statement timeout" =>
-            {
-                error!("{:?}", err);
-                timeout(ERROR_CODES_PREFIX)
-            }
+            if error_message.to_string() == "canceling statement due to statement timeout" =>
+        {
+            error!("{:?}", err);
+            timeout(ERROR_CODES_PREFIX)
+        }
         _ => {
             error!("{:?}", err);
             internal(ERROR_CODES_PREFIX)
@@ -99,10 +97,19 @@ async fn assets_get_controller(
 ) -> Result<List<Option<Asset>>, Rejection> {
     debug!("assets_get_controller"; "req" => format!("{:?}", req));
 
+    let limit = req.limit.unwrap_or(DEFAULT_LIMIT);
+
     let asset_ids: Vec<String> = if let Some(ids) = req.ids {
         ids
     } else {
-        assets_service.search(&services::assets::SearchRequest::from(req))?
+        let req = services::assets::SearchRequest::from(req).with_limit(limit + 1);
+        assets_service.search(&req)?
+    };
+
+    let has_next_page = if asset_ids.len() as u32 > limit {
+        true
+    } else {
+        false
     };
 
     let asset_ids = asset_ids.iter().map(AsRef::as_ref).collect_vec();
@@ -113,15 +120,25 @@ async fn assets_get_controller(
 
     debug!("assets: {:?}", assets);
 
+    let assets = assets
+        .into_iter()
+        .zip(has_images)
+        .map(|(o, has_image)| o.map(|a| Asset::from((a, has_image))))
+        .collect_vec();
+
+    let last_cursor = if has_next_page {
+        assets
+            .last()
+            .and_then(|o| o.as_ref().map(|a| a.data.id.clone()))
+    } else {
+        None
+    };
+
     let list = List {
-        items: assets
-            .into_iter()
-            .zip(has_images)
-            .map(|(o, has_image)| o.map(|a| Asset::from((a, has_image))))
-            .collect_vec(),
+        items: assets,
         page_info: PageInfo {
-            has_next_page: false,
-            last_cursor: None,
+            has_next_page,
+            last_cursor,
         },
     };
 

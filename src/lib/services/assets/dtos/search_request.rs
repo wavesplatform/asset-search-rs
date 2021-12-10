@@ -10,6 +10,20 @@ pub struct SearchRequest {
     pub smart: Option<bool>,
     pub verification_status_in: Option<Vec<VerificationStatus>>,
     pub asset_label_in: Option<Vec<AssetLabel>>,
-    pub limit: Option<i64>,
+    pub limit: u32,
     pub after: Option<String>,
+}
+
+impl SearchRequest {
+    pub fn with_limit(&self, limit: u32) -> Self {
+        let mut req = self.clone();
+        req.limit = limit;
+        req
+    }
+
+    pub fn with_after(&self, after: String) -> Self {
+        let mut req = self.clone();
+        req.after = Some(after);
+        req
+    }
 }

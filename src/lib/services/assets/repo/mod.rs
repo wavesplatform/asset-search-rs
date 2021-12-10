@@ -22,7 +22,7 @@ pub struct FindParams {
     pub smart: Option<bool>,
     pub verification_status_in: Option<Vec<VerificationStatus>>,
     pub asset_label_in: Option<Vec<AssetLabel>>,
-    pub limit: i64,
+    pub limit: u32,
     pub after: Option<String>,
 }
 
