@@ -4,7 +4,7 @@ use app_lib::{
     config, consumer, db, redis,
 };
 use std::sync::Arc;
-use wavesexchange_log::{error, info, debug};
+use wavesexchange_log::{error, info};
 
 #[tokio::main]
 async fn main() -> Result<()> {
