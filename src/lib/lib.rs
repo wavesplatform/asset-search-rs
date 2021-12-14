@@ -15,11 +15,3 @@ pub mod schema;
 pub mod services;
 mod tuple_len;
 pub mod waves;
-
-#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum InvalidateCacheMode {
-    BlockchainData,
-    UserDefinedData,
-    AllData,
-}

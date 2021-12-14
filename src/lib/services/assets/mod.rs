@@ -3,8 +3,8 @@ pub mod entities;
 pub mod repo;
 
 use itertools::Itertools;
+use std::sync::Arc;
 use std::{collections::HashMap, convert::TryFrom};
-use wavesexchange_log::trace;
 
 pub use self::dtos::SearchRequest;
 use crate::cache;
@@ -12,60 +12,107 @@ use crate::cache::{AssetBlockchainData, AssetUserDefinedData};
 use crate::error::Error as AppError;
 use crate::models::AssetInfo;
 
+use entities::UserDefinedData;
 use repo::{FindParams, TickerFilter};
 
-pub trait Service {
-    fn get(&self, id: &str) -> Result<Option<AssetInfo>, AppError>;
+#[derive(Clone, Debug, Default)]
+pub struct GetOptions {
+    bypass_cache: bool,
+}
 
-    fn mget(&self, ids: &[&str], height: Option<i32>) -> Result<Vec<Option<AssetInfo>>, AppError>;
+#[derive(Clone, Debug, Default)]
+pub struct MgetOptions {
+    height: Option<i32>,
+    bypass_cache: bool,
+}
+
+impl MgetOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn set_height(&self, height: i32) -> Self {
+        let mut opts = self.clone();
+        opts.height = Some(height);
+        opts
+    }
+
+    pub fn set_bypass_cache(&self, bypass_cache: bool) -> Self {
+        let mut opts = self.clone();
+        opts.bypass_cache = bypass_cache;
+        opts
+    }
+
+    pub fn with_height(height: i32) -> Self {
+        Self::default().set_height(height)
+    }
+
+    pub fn with_bypass_cache(bypass_cache: bool) -> Self {
+        Self::default().set_bypass_cache(bypass_cache)
+    }
+}
+
+pub trait Service {
+    fn get(&self, id: &str, opts: &GetOptions) -> Result<Option<AssetInfo>, AppError>;
+
+    fn mget(&self, ids: &[&str], opts: &MgetOptions) -> Result<Vec<Option<AssetInfo>>, AppError>;
 
     fn search(&self, req: &SearchRequest) -> Result<Vec<String>, AppError>;
+
+    fn user_defined_data(&self) -> Result<Vec<UserDefinedData>, AppError>;
 }
 
 pub struct AssetsService {
-    repo: Box<dyn repo::Repo + Send + Sync>,
+    repo: Arc<dyn repo::Repo + Send + Sync>,
     asset_blockhaind_data_cache: Box<dyn cache::SyncReadCache<AssetBlockchainData> + Send + Sync>,
     asset_user_defined_data_cache:
         Box<dyn cache::SyncReadCache<AssetUserDefinedData> + Send + Sync>,
-    oracle_address: String,
+    waves_association_address: String,
 }
 
 impl AssetsService {
     pub fn new(
-        repo: Box<dyn repo::Repo + Send + Sync>,
+        repo: Arc<dyn repo::Repo + Send + Sync>,
         asset_blockhaind_data_cache: Box<
             dyn cache::SyncReadCache<AssetBlockchainData> + Send + Sync,
         >,
         asset_user_defined_data_cache: Box<
             dyn cache::SyncReadCache<AssetUserDefinedData> + Send + Sync,
         >,
-        oracle_address: &str,
+        waves_association_address: &str,
     ) -> Self {
         Self {
             repo,
             asset_blockhaind_data_cache,
             asset_user_defined_data_cache,
-            oracle_address: oracle_address.to_owned(),
+            waves_association_address: waves_association_address.to_owned(),
         }
     }
 }
 
 impl Service for AssetsService {
-    fn get(&self, id: &str) -> Result<Option<AssetInfo>, AppError> {
+    fn get(&self, id: &str, opts: &GetOptions) -> Result<Option<AssetInfo>, AppError> {
         // fetch asset blockchain data
         //   if is some -> return cached
         //   else -> go to pg
         // fetch asset user defined data
         //   if is some -> return cached
         //   else -> go to pg
-        let cached_asset = self.asset_blockhaind_data_cache.get(id)?;
+
+        let cached_asset = if opts.bypass_cache {
+            None
+        } else {
+            self.asset_blockhaind_data_cache.get(id)?
+        };
 
         let asset_blockchain_data = if let Some(cached) = cached_asset {
             Some(cached)
         } else {
             let not_cached_asset = self.repo.get(&id)?;
 
-            let asset_oracles_data = self.repo.data_entries(&[id], &self.oracle_address)?;
+            let asset_oracles_data = self
+                .repo
+                .data_entries(&[id], &self.waves_association_address)?;
 
             let asset_oracles_data =
                 asset_oracles_data
@@ -89,14 +136,18 @@ impl Service for AssetsService {
         };
 
         if let Some(asset_blockchain_data) = asset_blockchain_data {
-            let cached_asset_user_defined_data = self.asset_user_defined_data_cache.get(id)?;
+            let cached_asset_user_defined_data = if opts.bypass_cache {
+                None
+            } else {
+                self.asset_user_defined_data_cache.get(id)?
+            };
 
             let asset_user_defined_data = if let Some(cached) = cached_asset_user_defined_data {
                 cached
             } else {
                 let data = self
                     .repo
-                    .get_asset_user_defined_data(&id, &self.oracle_address)?;
+                    .get_asset_user_defined_data(&id, &self.waves_association_address)?;
                 AssetUserDefinedData::from(&data)
             };
 
@@ -108,12 +159,14 @@ impl Service for AssetsService {
         }
     }
 
-    fn mget(&self, ids: &[&str], height: Option<i32>) -> Result<Vec<Option<AssetInfo>>, AppError> {
-        match height {
+    fn mget(&self, ids: &[&str], opts: &MgetOptions) -> Result<Vec<Option<AssetInfo>>, AppError> {
+        match opts.height {
             Some(height) => {
                 let assets = self.repo.mget_for_height(ids, height)?;
 
-                let asset_oracles_data = self.repo.data_entries(&ids, &self.oracle_address)?;
+                let asset_oracles_data = self
+                    .repo
+                    .data_entries(&ids, &self.waves_association_address)?;
 
                 let assets_oracles_data =
                     asset_oracles_data
@@ -130,7 +183,7 @@ impl Service for AssetsService {
 
                 let assets_user_defined_data = self
                     .repo
-                    .mget_asset_user_defined_data(&ids, &self.oracle_address)?;
+                    .mget_asset_user_defined_data(&ids, &self.waves_association_address)?;
 
                 let assets_user_defined_data =
                     assets_user_defined_data
@@ -171,9 +224,11 @@ impl Service for AssetsService {
                 Ok(assets_info)
             }
             None => {
-                trace!("fetch assets from cache"; "ids" => format!("{:?}", ids));
-
-                let cached_assets = self.asset_blockhaind_data_cache.mget(ids)?;
+                let cached_assets = if opts.bypass_cache {
+                    vec![None; ids.len()]
+                } else {
+                    self.asset_blockhaind_data_cache.mget(ids)?
+                };
 
                 let not_cached_asset_ids = cached_assets
                     .iter()
@@ -192,7 +247,7 @@ impl Service for AssetsService {
 
                     let asset_oracles_data = self
                         .repo
-                        .data_entries(&not_cached_asset_ids, &self.oracle_address)?;
+                        .data_entries(&not_cached_asset_ids, &self.waves_association_address)?;
 
                     // AssetId -> OracleAddress -> Vec<DataEntry>
                     let assets_oracles_data =
@@ -237,8 +292,11 @@ impl Service for AssetsService {
                     cached_assets
                 };
 
-                let cached_assets_user_defined_data =
-                    self.asset_user_defined_data_cache.mget(ids)?;
+                let cached_assets_user_defined_data = if opts.bypass_cache {
+                    vec![None; ids.len()]
+                } else {
+                    self.asset_user_defined_data_cache.mget(ids)?
+                };
 
                 let not_cached_asset_user_defined_data_ids = cached_assets_user_defined_data
                     .iter()
@@ -255,7 +313,7 @@ impl Service for AssetsService {
                 let assets_user_defined_data = if not_cached_asset_user_defined_data_ids.len() > 0 {
                     let assets_user_defined_data = self
                         .repo
-                        .mget_asset_user_defined_data(&ids, &self.oracle_address)?;
+                        .mget_asset_user_defined_data(&ids, &self.waves_association_address)?;
 
                     cached_assets_user_defined_data
                         .into_iter()
@@ -320,5 +378,10 @@ impl Service for AssetsService {
                 .map(|asset_id| asset_id.id.to_owned())
                 .collect()
         })
+    }
+
+    fn user_defined_data(&self) -> Result<Vec<UserDefinedData>, AppError> {
+        self.repo
+            .all_assets_user_defined_data(&self.waves_association_address)
     }
 }

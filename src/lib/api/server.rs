@@ -12,6 +12,7 @@ use super::models::{Asset, List};
 use super::{DEFAULT_LIMIT, ERROR_CODES_PREFIX};
 use crate::error;
 use crate::services;
+use crate::services::assets::MgetOptions;
 
 pub async fn start(
     port: u16,
@@ -113,7 +114,12 @@ async fn assets_get_controller(
 
     let asset_ids = asset_ids.iter().map(AsRef::as_ref).collect_vec();
 
-    let assets = assets_service.mget(&asset_ids, opts.height_gte)?;
+    let mget_options = match opts.height_gte {
+        Some(height) => MgetOptions::with_height(height),
+        _ => MgetOptions::default(),
+    };
+
+    let assets = assets_service.mget(&asset_ids, &mget_options)?;
 
     let has_images = images_service.has_images(&asset_ids).await?;
 
@@ -150,7 +156,12 @@ async fn assets_post_controller(
     debug!("assets_post_controller");
     let asset_ids = req.ids.iter().map(AsRef::as_ref).collect_vec();
 
-    let assets = assets_service.mget(&asset_ids, opts.height_gte)?;
+    let mget_options = match opts.height_gte {
+        Some(height) => MgetOptions::with_height(height),
+        _ => MgetOptions::default(),
+    };
+
+    let assets = assets_service.mget(&asset_ids, &mget_options)?;
 
     let has_images = images_service.has_images(&asset_ids).await?;
 

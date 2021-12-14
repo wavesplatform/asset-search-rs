@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use app_lib::{
     admin, api_clients,
@@ -13,17 +15,21 @@ async fn main() -> Result<()> {
     let pg_pool = db::pool(&admin_config.postgres)?;
     let redis_pool = redis::pool(&admin_config.redis)?;
 
+    let assets_blockchain_data_cache =
+        cache::redis::new(redis_pool.clone(), ASSET_KEY_PREFIX.to_owned());
+
+    let assets_user_defined_data_redis_cache = cache::redis::new(
+        redis_pool.clone(),
+        ASSET_USER_DEFINED_DATA_KEY_PREFIX.to_owned(),
+    );
+
     let assets_service = {
         let pg_repo = app_lib::services::assets::repo::pg::PgRepo::new(pg_pool.clone());
-        let assets_redis_cache = cache::redis::new(redis_pool.clone(), ASSET_KEY_PREFIX.to_owned());
-        let assets_user_defined_data_redis_cache = cache::redis::new(
-            redis_pool.clone(),
-            ASSET_USER_DEFINED_DATA_KEY_PREFIX.to_owned(),
-        );
+
         app_lib::services::assets::AssetsService::new(
-            Box::new(pg_repo),
-            Box::new(assets_redis_cache),
-            Box::new(assets_user_defined_data_redis_cache),
+            Arc::new(pg_repo),
+            Box::new(assets_blockchain_data_cache.clone()),
+            Box::new(assets_user_defined_data_redis_cache.clone()),
             &admin_config.app.waves_association_address,
         )
     };
@@ -33,7 +39,7 @@ async fn main() -> Result<()> {
         let redis_cache =
             cache::redis::new(redis_pool, ASSET_USER_DEFINED_DATA_KEY_PREFIX.to_owned());
         app_lib::services::admin_assets::AdminAssetsService::new(
-            Box::new(pg_repo),
+            Arc::new(pg_repo),
             Box::new(redis_cache),
         )
     };
@@ -48,6 +54,8 @@ async fn main() -> Result<()> {
             assets_service,
             app_lib::services::images::dummy::DummyService::new(),
             admin_assets_service,
+            assets_blockchain_data_cache,
+            assets_user_defined_data_redis_cache,
             api_key.clone(),
         )
         .await;
@@ -58,12 +66,15 @@ async fn main() -> Result<()> {
                     .with_user_agent("Asset search Service");
             app_lib::services::images::http::HttpService::new(images_api_client)
         };
+
         admin::server::start(
             port,
             assets_service,
             images_service,
             admin_assets_service,
-            api_key,
+            assets_blockchain_data_cache,
+            assets_user_defined_data_redis_cache,
+            api_key.clone(),
         )
         .await;
     }

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use app_lib::{
     api::{self},
@@ -20,7 +22,7 @@ async fn main() -> Result<()> {
         let assets_user_defined_data_redis_cache =
             cache::redis::new(redis_pool, ASSET_USER_DEFINED_DATA_KEY_PREFIX.to_owned());
         app_lib::services::assets::AssetsService::new(
-            Box::new(pg_repo),
+            Arc::new(pg_repo),
             Box::new(assets_redis_cache),
             Box::new(assets_user_defined_data_redis_cache),
             &config.app.waves_association_address,
@@ -39,9 +41,8 @@ async fn main() -> Result<()> {
         .await;
     } else {
         let images_service = {
-            let images_api_client =
-                api_clients::HttpClient::new(&config.api.image_service_url)?
-                    .with_user_agent("Asset search Service");
+            let images_api_client = api_clients::HttpClient::new(&config.api.image_service_url)?
+                .with_user_agent("Asset search Service");
             app_lib::services::images::http::HttpService::new(images_api_client)
         };
         api::server::start(port, assets_service, images_service).await;

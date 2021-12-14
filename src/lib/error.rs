@@ -44,6 +44,8 @@ pub enum Error {
     InvalidVariant(String),
     #[error("JoinError: {0}")]
     JoinError(#[from] tokio::task::JoinError),
+    #[error("InvalidateCacheError: {0}")]
+    InvalidateCacheError(String),
 }
 
 impl Reject for Error {}

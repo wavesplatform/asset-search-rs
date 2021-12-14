@@ -752,7 +752,6 @@ fn handle_assets_updates<R: repo::Repo>(repo: Arc<R>, updates: &[(&i64, Asset)])
         })
         .collect::<Vec<(InsertableAsset, Vec<InsertableAsset>)>>();
 
-    // First uid for each asset in a new batch. This value closes superseded_by of previous updates.
     let assets_first_uids: Vec<AssetOverride> = assets_grouped_with_uids_superseded_by
         .iter()
         .map(|(_, group)| {
@@ -1268,7 +1267,8 @@ where
     repo.rollback_blocks_microblocks(&block_uid)?;
 
     let assets = repo.mget_assets(&assets_to_rollback)?;
-    let asset_ids = assets
+
+    let asset_ids = &assets
         .iter()
         .filter_map(|o| match o {
             Some(a) => Some(a.id.as_str()),
@@ -1276,41 +1276,30 @@ where
         })
         .collect::<Vec<_>>();
 
-    let asset_oracles_data =
+    let assets_oracles_data =
         repo.assets_oracle_data_entries(&asset_ids, waves_association_address)?;
 
     let assets_oracles_data =
-        asset_oracles_data
+        assets_oracles_data
             .into_iter()
             .fold(HashMap::new(), |mut acc, cur| {
                 let asset_data = acc.entry(cur.asset_id.clone()).or_insert(HashMap::new());
                 let asset_oracle_data = asset_data
                     .entry(cur.oracle_address.clone())
                     .or_insert(vec![]);
-                asset_oracle_data.push(cur);
+                let asset_oracle_data_entry = AssetOracleDataEntry::from(&cur);
+                asset_oracle_data.push(asset_oracle_data_entry);
                 acc
             });
 
     assets
-        .into_iter()
+        .iter()
         .filter_map(|o| match o {
             Some(a) => {
                 let asset_oracles_data =
                     assets_oracles_data.get(&a.id).cloned().unwrap_or_default();
-                let asset_oracles_data = asset_oracles_data
-                    .into_iter()
-                    .map(|(oracle_address, entries)| {
-                        (
-                            oracle_address,
-                            entries
-                                .iter()
-                                .map(|e| AssetOracleDataEntry::from(e))
-                                .collect::<Vec<_>>(),
-                        )
-                    })
-                    .collect::<HashMap<String, Vec<AssetOracleDataEntry>>>();
 
-                Some(AssetBlockchainData::from((&a, &asset_oracles_data)))
+                Some(AssetBlockchainData::from((a, &asset_oracles_data)))
             }
             _ => None,
         })
@@ -1318,7 +1307,49 @@ where
             blockchain_data_cache.set(&asset_blockchain_data.id.clone(), asset_blockchain_data)
         })?;
 
-    // todo: invalidate labels (user defined data)
+    let cached_user_defined_data = user_defined_data_cache.mget(&asset_ids)?.into_iter().fold(
+        HashMap::with_capacity(asset_ids.len()),
+        |mut acc, o| {
+            if let Some(a) = o {
+                acc.insert(a.asset_id.clone(), a);
+            }
+            acc
+        },
+    );
+
+    asset_ids.iter().try_for_each(|asset_id| {
+        let wa_verified_asset_label_update =
+            assets_oracles_data
+                .get(asset_id.to_owned())
+                .and_then(|asset_oracles_data| {
+                    extract_wa_verified_asset_label_update(asset_oracles_data)
+                });
+
+        if let Some(wa_verified_asset_label_update) = wa_verified_asset_label_update {
+            let current_asset_user_defined_data = match cached_user_defined_data.get(*asset_id) {
+                Some(cached) => cached.to_owned(),
+                _ => AssetUserDefinedData {
+                    asset_id: asset_id.to_string(),
+                    ticker: None,
+                    verification_status: crate::models::VerificationStatus::Unknown,
+                    labels: vec![],
+                },
+            };
+
+            let new_asset_user_defined_data = match wa_verified_asset_label_update {
+                AssetLabelUpdate::SetLabel(label) => {
+                    current_asset_user_defined_data.add_label(&label)
+                }
+                AssetLabelUpdate::DeleteLabel(label) => {
+                    current_asset_user_defined_data.delete_label(&label)
+                }
+            };
+
+            user_defined_data_cache.set(&asset_id, new_asset_user_defined_data)
+        } else {
+            Ok(())
+        }
+    })?;
 
     Ok(())
 }

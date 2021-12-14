@@ -1,3 +1,4 @@
+pub mod invalidator;
 pub mod redis;
 
 use chrono::{DateTime, Utc};
@@ -12,6 +13,14 @@ use crate::models::{
 
 pub const ASSET_KEY_PREFIX: &str = "asset";
 pub const ASSET_USER_DEFINED_DATA_KEY_PREFIX: &str = "asset_user_defined_data";
+
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum InvalidateCacheMode {
+    BlockchainData,
+    UserDefinedData,
+    AllData,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AssetBlockchainData {

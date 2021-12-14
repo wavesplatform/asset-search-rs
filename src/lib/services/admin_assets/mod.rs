@@ -2,6 +2,7 @@ pub mod repo;
 
 use std::collections::HashSet;
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 use crate::cache::{AssetUserDefinedData, SyncWriteCache};
 use crate::db::enums::{AssetWxLabelValueType, VerificationStatusValueType};
@@ -23,16 +24,19 @@ pub trait Service {
 }
 
 pub struct AdminAssetsService {
-    pub repo: Box<dyn repo::Repo + Send + Sync>,
-    pub cache: Box<dyn SyncWriteCache<AssetUserDefinedData> + Send + Sync>,
+    pub repo: Arc<dyn repo::Repo + Send + Sync>,
+    pub user_defined_data_cache: Box<dyn SyncWriteCache<AssetUserDefinedData> + Send + Sync>,
 }
 
 impl AdminAssetsService {
     pub fn new(
-        repo: Box<dyn repo::Repo + Send + Sync>,
-        cache: Box<dyn SyncWriteCache<AssetUserDefinedData> + Send + Sync>,
+        repo: Arc<dyn repo::Repo + Send + Sync>,
+        user_defined_data_cache: Box<dyn SyncWriteCache<AssetUserDefinedData> + Send + Sync>,
     ) -> Self {
-        Self { repo, cache }
+        Self {
+            repo,
+            user_defined_data_cache,
+        }
     }
 }
 
@@ -49,7 +53,7 @@ impl Service for AdminAssetsService {
             .map_err(|e| AppError::DbError(e.to_string()))?
         {
             let asset_user_defined_data = if let Some(cached_data) = self
-                .cache
+                .user_defined_data_cache
                 .get(id)
                 .map_err(|e| AppError::CacheError(format!("{}", e)))?
             {
@@ -68,7 +72,8 @@ impl Service for AdminAssetsService {
                 }
             };
 
-            self.cache.set(id, asset_user_defined_data)?;
+            self.user_defined_data_cache
+                .set(id, asset_user_defined_data)?;
 
             Ok(())
         } else {
@@ -84,7 +89,7 @@ impl Service for AdminAssetsService {
         {
             let ticker = ticker.map(|s| s.to_owned());
             let asset_user_defined_data = if let Some(cached_data) = self
-                .cache
+                .user_defined_data_cache
                 .get(id)
                 .map_err(|e| AppError::CacheError(format!("{}", e)))?
             {
@@ -103,7 +108,8 @@ impl Service for AdminAssetsService {
                 }
             };
 
-            self.cache.set(id, asset_user_defined_data)?;
+            self.user_defined_data_cache
+                .set(id, asset_user_defined_data)?;
 
             Ok(())
         } else {
@@ -123,7 +129,7 @@ impl Service for AdminAssetsService {
             let label = label.to_owned();
 
             let asset_user_defined_data = if let Some(cached_data) = self
-                .cache
+                .user_defined_data_cache
                 .get(id)
                 .map_err(|e| AppError::CacheError(format!("{}", e)))?
             {
@@ -148,7 +154,8 @@ impl Service for AdminAssetsService {
                 }
             };
 
-            self.cache.set(id, asset_user_defined_data)?;
+            self.user_defined_data_cache
+                .set(id, asset_user_defined_data)?;
 
             Ok(())
         } else {
@@ -168,7 +175,7 @@ impl Service for AdminAssetsService {
             let label = label.to_owned();
 
             let asset_user_defined_data = if let Some(cached_data) = self
-                .cache
+                .user_defined_data_cache
                 .get(id)
                 .map_err(|e| AppError::CacheError(format!("{}", e)))?
             {
@@ -193,7 +200,8 @@ impl Service for AdminAssetsService {
                 }
             };
 
-            self.cache.set(id, asset_user_defined_data)?;
+            self.user_defined_data_cache
+                .set(id, asset_user_defined_data)?;
 
             Ok(())
         } else {
