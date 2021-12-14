@@ -63,7 +63,7 @@ impl Service for AssetsService {
         let asset_blockchain_data = if let Some(cached) = cached_asset {
             Some(cached)
         } else {
-            let not_cached_asset = self.repo.get(&id, &self.oracle_address)?;
+            let not_cached_asset = self.repo.get(&id)?;
 
             let asset_oracles_data = self.repo.data_entries(&[id], &self.oracle_address)?;
 
@@ -111,9 +111,7 @@ impl Service for AssetsService {
     fn mget(&self, ids: &[&str], height: Option<i32>) -> Result<Vec<Option<AssetInfo>>, AppError> {
         match height {
             Some(height) => {
-                let assets = self
-                    .repo
-                    .mget_for_height(ids, height, &self.oracle_address)?;
+                let assets = self.repo.mget_for_height(ids, height)?;
 
                 let asset_oracles_data = self.repo.data_entries(&ids, &self.oracle_address)?;
 
@@ -190,9 +188,7 @@ impl Service for AssetsService {
                     .collect_vec();
 
                 let assets_blockchain_data = if not_cached_asset_ids.len() > 0 {
-                    let assets = self
-                        .repo
-                        .mget(&not_cached_asset_ids, &self.oracle_address)?;
+                    let assets = self.repo.mget(&not_cached_asset_ids)?;
 
                     let asset_oracles_data = self
                         .repo

@@ -35,17 +35,32 @@ pub enum TickerFilter {
 pub trait Repo {
     fn find(&self, params: FindParams) -> Result<Vec<AssetId>, AppError>;
 
-    fn get(&self, id: &str, oracle_address: &str) -> Result<Option<Asset>, AppError>;
+    fn get(&self, id: &str) -> Result<Option<Asset>, AppError>;
 
-    fn mget(&self, ids: &[&str], oracle_address: &str) -> Result<Vec<Option<Asset>>, AppError>;
+    fn mget(&self, ids: &[&str]) -> Result<Vec<Option<Asset>>, AppError>;
 
-    fn mget_for_height(&self, ids: &[&str], height: i32, oracle_address: &str) -> Result<Vec<Option<Asset>>, AppError>;
+    fn mget_for_height(&self, ids: &[&str], height: i32) -> Result<Vec<Option<Asset>>, AppError>;
 
-    fn data_entries(&self, asset_ids: &[&str], oracle_address: &str) -> Result<Vec<OracleDataEntry>, AppError>;
+    fn data_entries(
+        &self,
+        asset_ids: &[&str],
+        oracle_address: &str,
+    ) -> Result<Vec<OracleDataEntry>, AppError>;
 
-    fn get_asset_user_defined_data(&self, id: &str, oracle_address: &str) -> Result<UserDefinedData, AppError>;
+    fn get_asset_user_defined_data(
+        &self,
+        id: &str,
+        oracle_address: &str,
+    ) -> Result<UserDefinedData, AppError>;
 
-    fn mget_asset_user_defined_data(&self, ids: &[&str], oracle_address: &str) -> Result<Vec<UserDefinedData>, AppError>;
+    fn mget_asset_user_defined_data(
+        &self,
+        ids: &[&str],
+        oracle_address: &str,
+    ) -> Result<Vec<UserDefinedData>, AppError>;
 
-    fn all_assets_user_defined_data(&self, oracle_address: &str) -> Result<Vec<UserDefinedData>, AppError>;
+    fn all_assets_user_defined_data(
+        &self,
+        oracle_address: &str,
+    ) -> Result<Vec<UserDefinedData>, AppError>;
 }

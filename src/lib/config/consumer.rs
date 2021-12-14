@@ -19,7 +19,7 @@ pub struct ConfigFlat {
     #[serde(default = "default_max_wait_time_in_secs")]
     pub max_wait_time_in_secs: u64,
     pub chain_id: u8,
-    pub oracle_addresses: Vec<String>,
+    pub waves_association_address: String,
 }
 
 #[derive(Debug, Clone)]
@@ -29,7 +29,7 @@ pub struct Config {
     pub updates_per_request: usize,
     pub max_wait_time_in_secs: u64,
     pub chain_id: u8,
-    pub oracle_addresses: Vec<String>,
+    pub waves_association_address: String,
 }
 
 pub fn load() -> Result<Config, Error> {
@@ -41,6 +41,6 @@ pub fn load() -> Result<Config, Error> {
         updates_per_request: config_flat.updates_per_request,
         max_wait_time_in_secs: config_flat.max_wait_time_in_secs,
         chain_id: config_flat.chain_id,
-        oracle_addresses: config_flat.oracle_addresses,
+        waves_association_address: config_flat.waves_association_address,
     })
 }

@@ -1,10 +1,11 @@
 use anyhow::{Error, Result};
+use diesel::dsl::sql;
 use diesel::pg::PgConnection;
-use diesel::prelude::*;
-use diesel::sql_types::{Array, BigInt, VarChar};
+use diesel::sql_types::{Array, BigInt, Text, VarChar};
+use diesel::{prelude::*, sql_query};
 
 use super::super::models::{
-    asset::{AssetOverride, DeletedAsset, InsertableAsset},
+    asset::{AssetOverride, DeletedAsset, InsertableAsset, QueryableAsset},
     block_microblock::BlockMicroblock,
     data_entry::{DataEntryOverride, DeletedDataEntry, InsertableDataEntry},
     issuer_balance::{
@@ -14,6 +15,8 @@ use super::super::models::{
 };
 use super::super::PrevHandledHeight;
 use super::Repo;
+use crate::consumer::models::asset::OracleDataEntry;
+use crate::db::enums::DataEntryValueTypeMapping;
 use crate::error::Error as AppError;
 use crate::schema::{
     assets, assets_uid_seq, blocks_microblocks, data_entries, data_entries_uid_seq,
@@ -253,6 +256,77 @@ impl Repo for PgRepoImpl {
                 let context = format!("Cannot rollback assets: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
             })
+    }
+
+    fn assets_gt_block_uid(&self, block_uid: &i64) -> Result<Vec<i64>> {
+        assets::table
+            .select(assets::uid)
+            .filter(assets::block_uid.gt(block_uid))
+            .get_results(&self.conn)
+            .map_err(|err| {
+                let context = format!(
+                    "Cannot get assets greater then block_uid {}: {}",
+                    block_uid, err
+                );
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn mget_assets(&self, uids: &[i64]) -> Result<Vec<Option<QueryableAsset>>> {
+        let q = sql_query("SELECT 
+            a.id,
+            a.name,
+            a.precision,
+            a.description,
+            bm.height,
+            a.time_stamp as timestamp,
+            a.issuer,
+            a.quantity,
+            a.reissuable,
+            a.min_sponsored_fee,
+            a.smart,
+            CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ib.regular_balance END AS sponsor_regular_balance,
+            CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ol.amount END          AS sponsor_out_leasing
+            FROM assets AS a
+            LEFT JOIN blocks_microblocks bm ON a.block_uid = bm.uid
+            LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = $1
+            LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = $1
+            WHERE a.superseded_by = $1 AND a.uid = ANY($2)"
+        )
+        .bind::<BigInt, _>(MAX_UID)
+        .bind::<Array<BigInt>, _>(uids);
+
+        q.load(&self.conn).map_err(|err| {
+            let context = format!("Cannot mget assets: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
+    }
+
+    fn assets_oracle_data_entries(
+        &self,
+        asset_ids: &[&str],
+        oracle_address: &str,
+    ) -> Result<Vec<OracleDataEntry>> {
+        let q = data_entries::table
+            .select((
+                sql::<Text>("related_asset_id"),
+                data_entries::address,
+                data_entries::key,
+                sql::<DataEntryValueTypeMapping>("data_type"),
+                data_entries::bin_val,
+                data_entries::bool_val,
+                data_entries::int_val,
+                data_entries::str_val,
+            ))
+            .filter(data_entries::superseded_by.eq(MAX_UID))
+            .filter(data_entries::address.eq(oracle_address))
+            .filter(data_entries::related_asset_id.eq_any(asset_ids))
+            .filter(data_entries::data_type.is_not_null());
+
+        q.load(&self.conn).map_err(|err| {
+            let context = format!("Cannot assets oracle data entries: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
     }
 
     //

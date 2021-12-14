@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
         config.consumer.updates_per_request,
         config.consumer.max_wait_time_in_secs,
         config.consumer.chain_id,
-        &config.consumer.oracle_addresses,
+        &config.consumer.waves_association_address,
     )
     .await
     {

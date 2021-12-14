@@ -2,7 +2,9 @@ pub mod pg;
 
 use anyhow::Result;
 
-use super::models::asset::{AssetOverride, DeletedAsset, InsertableAsset};
+use super::models::asset::{
+    AssetOverride, DeletedAsset, InsertableAsset, OracleDataEntry, QueryableAsset,
+};
 use super::models::block_microblock::BlockMicroblock;
 use super::models::data_entry::{DataEntryOverride, DeletedDataEntry, InsertableDataEntry};
 use super::models::issuer_balance::{
@@ -54,6 +56,16 @@ pub trait Repo {
     fn set_assets_next_update_uid(&self, new_uid: i64) -> Result<()>;
 
     fn rollback_assets(&self, block_uid: &i64) -> Result<Vec<DeletedAsset>>;
+
+    fn assets_gt_block_uid(&self, block_uid: &i64) -> Result<Vec<i64>>;
+
+    fn mget_assets(&self, uids: &[i64]) -> Result<Vec<Option<QueryableAsset>>>;
+
+    fn assets_oracle_data_entries(
+        &self,
+        asset_ids: &[&str],
+        oracle_address: &str,
+    ) -> Result<Vec<OracleDataEntry>>;
 
     //
     // DATA ENTRIES
