@@ -8,6 +8,13 @@ use crate::consumer::models::data_entry::DataEntryValue;
 use crate::models::{AssetLabel, DataEntryType, VerificationStatus};
 use crate::schema::{asset_wx_labels, assets, predefined_verifications};
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename = "list")]
+pub struct List<T> {
+    pub data: Vec<T>,
+    pub cursor: Option<String>
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename = "asset")]
 pub struct Asset {

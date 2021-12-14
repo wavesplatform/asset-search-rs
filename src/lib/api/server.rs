@@ -6,10 +6,9 @@ use wavesexchange_warp::error::{
     error_handler_with_serde_qs, handler, internal, timeout, validation,
 };
 use wavesexchange_warp::log::access;
-use wavesexchange_warp::pagination::{List, PageInfo};
 
 use super::dtos::{MgetRequest, RequestOptions, SearchRequest};
-use super::models::Asset;
+use super::models::{Asset, List};
 use super::{DEFAULT_LIMIT, ERROR_CODES_PREFIX};
 use crate::error;
 use crate::services;
@@ -135,11 +134,8 @@ async fn assets_get_controller(
     };
 
     let list = List {
-        items: assets,
-        page_info: PageInfo {
-            has_next_page,
-            last_cursor,
-        },
+        data: assets,
+        cursor: last_cursor,
     };
 
     Ok(list)
@@ -159,15 +155,12 @@ async fn assets_post_controller(
     let has_images = images_service.has_images(&asset_ids).await?;
 
     let list = List {
-        items: assets
+        data: assets
             .into_iter()
             .zip(has_images)
             .map(|(o, has_image)| o.map(|a| (a, has_image).into()))
             .collect_vec(),
-        page_info: PageInfo {
-            has_next_page: false,
-            last_cursor: None,
-        },
+        cursor: None,
     };
 
     Ok(list)

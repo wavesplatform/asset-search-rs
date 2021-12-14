@@ -27,7 +27,7 @@ impl Client for HttpClient {
         })?;
 
         let req_end_time = Instant::now();
-        let dur = (req_end_time - req_start_time);
+        let dur = req_end_time - req_start_time;
         debug!("Images service request has took {:?}ms", dur.as_millis());
 
         if resp.status() == StatusCode::OK {
