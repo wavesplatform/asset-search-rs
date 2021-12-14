@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use reqwest::StatusCode;
+use tokio::time::Instant;
 use wavesexchange_log::{debug, trace};
 
 use super::{ApiBaseUrl, Error, HttpClient};
@@ -16,7 +17,7 @@ impl Client for HttpClient {
 
         trace!("Images service request:\n\tURL: {}", endpoint_url);
 
-        let req_start_time = chrono::Utc::now();
+        let req_start_time = Instant::now();
 
         let resp = self.client.get(&endpoint_url).send().await.map_err(|err| {
             Error::HttpRequestError(
@@ -25,11 +26,9 @@ impl Client for HttpClient {
             )
         })?;
 
-        let req_end_time = chrono::Utc::now();
-        debug!(
-            "Images service request has took {:?}ms",
-            (req_end_time - req_start_time).num_milliseconds()
-        );
+        let req_end_time = Instant::now();
+        let dur = (req_end_time - req_start_time);
+        debug!("Images service request has took {:?}ms", dur.as_millis());
 
         if resp.status() == StatusCode::OK {
             Ok(true)
