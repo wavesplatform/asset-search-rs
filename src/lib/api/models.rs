@@ -229,7 +229,7 @@ impl From<(Option<crate::models::AssetInfo>, bool, bool)> for Asset {
                         .collect_vec(),
                     sponsor_balance: asset_info.metadata.sponsor_balance.map(|sb| {
                         match sb.out_leasing {
-                            Some(out_leasing) => sb.regular_balance + out_leasing,
+                            Some(out_leasing) => sb.regular_balance - out_leasing,
                             _ => sb.regular_balance,
                         }
                     }),

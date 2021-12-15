@@ -163,15 +163,14 @@ impl Default for VerificationStatus {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "UPPERCASE")]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum AssetLabel {
     Gateway,
+    #[serde(rename = "DEFI")]
     DeFi,
     Stablecoin,
     Qualified,
-    #[serde(rename = "WA_VERIFIED")]
     WaVerified,
-    #[serde(rename = "COMMUNITY_VERIFIED")]
     CommunityVerified,
     #[serde(rename = "null")]
     WithoutLabels,
@@ -235,13 +234,13 @@ impl TryFrom<&str> for AssetLabel {
 impl Display for AssetLabel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AssetLabel::Gateway => f.write_str("GATEWAY"),
-            AssetLabel::DeFi => f.write_str("DEFI"),
-            AssetLabel::Stablecoin => f.write_str("STABLECOIN"),
-            AssetLabel::Qualified => f.write_str("QUALIFIED"),
-            AssetLabel::WaVerified => f.write_str("WA_VERIFIED"),
-            AssetLabel::CommunityVerified => f.write_str("COMMUNITY_VERIFIED"),
-            &AssetLabel::WithoutLabels => Ok(()),
+            AssetLabel::Gateway
+            | AssetLabel::DeFi
+            | AssetLabel::Stablecoin
+            | AssetLabel::Qualified
+            | AssetLabel::WaVerified
+            | AssetLabel::CommunityVerified => f.write_str(&self.to_string()),
+            AssetLabel::WithoutLabels => Ok(()),
         }
     }
 }
