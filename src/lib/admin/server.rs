@@ -281,7 +281,7 @@ async fn asset_verification_status_controller(
     assets_service: Arc<impl services::assets::Service>,
     images_service: Arc<impl services::images::Service>,
     admin_assets_service: Arc<impl services::admin_assets::Service>,
-) -> Result<Option<Asset>, Rejection> {
+) -> Result<Asset, Rejection> {
     let verification_status = VerificationStatus::try_from(verification_status)?;
     debug!("asset_verification_status_controller"; "asset_id" => &asset_id, "verification_status" => format!("{}", verification_status));
 
@@ -290,7 +290,7 @@ async fn asset_verification_status_controller(
     let maybe_asset_info = assets_service.get(&asset_id, &GetOptions::default())?;
     let has_image = images_service.has_image(&asset_id).await?;
 
-    Ok(maybe_asset_info.map(|asset_info| Asset::from((asset_info, has_image))))
+    Ok(Asset::from((maybe_asset_info, has_image, true)))
 }
 
 async fn asset_set_ticker_controller(
@@ -299,7 +299,7 @@ async fn asset_set_ticker_controller(
     assets_service: Arc<impl services::assets::Service>,
     images_service: Arc<impl services::images::Service>,
     admin_assets_service: Arc<impl services::admin_assets::Service>,
-) -> Result<Option<Asset>, Rejection> {
+) -> Result<Asset, Rejection> {
     debug!("asset_set_ticker_controller"; "asset_id" => &asset_id, "ticker" => &ticker);
 
     admin_assets_service.update_ticker(&asset_id, Some(&ticker))?;
@@ -307,7 +307,7 @@ async fn asset_set_ticker_controller(
     let maybe_asset_info = assets_service.get(&asset_id, &GetOptions::default())?;
     let has_image = images_service.has_image(&asset_id).await?;
 
-    Ok(maybe_asset_info.map(|asset_info| Asset::from((asset_info, has_image))))
+    Ok(Asset::from((maybe_asset_info, has_image, true)))
 }
 
 async fn asset_delete_ticker_controller(
@@ -315,7 +315,7 @@ async fn asset_delete_ticker_controller(
     assets_service: Arc<impl services::assets::Service>,
     images_service: Arc<impl services::images::Service>,
     admin_assets_service: Arc<impl services::admin_assets::Service>,
-) -> Result<Option<Asset>, Rejection> {
+) -> Result<Asset, Rejection> {
     debug!("asset_delete_ticker_controller"; "asset_id" => &asset_id);
 
     admin_assets_service.update_ticker(&asset_id, None)?;
@@ -323,7 +323,7 @@ async fn asset_delete_ticker_controller(
     let maybe_asset_info = assets_service.get(&asset_id, &GetOptions::default())?;
     let has_image = images_service.has_image(&asset_id).await?;
 
-    Ok(maybe_asset_info.map(|asset_info| Asset::from((asset_info, has_image))))
+    Ok(Asset::from((maybe_asset_info, has_image, true)))
 }
 
 async fn asset_add_label_controller(
@@ -332,7 +332,7 @@ async fn asset_add_label_controller(
     assets_service: Arc<impl services::assets::Service>,
     images_service: Arc<impl services::images::Service>,
     admin_assets_service: Arc<impl services::admin_assets::Service>,
-) -> Result<Option<Asset>, Rejection> {
+) -> Result<Asset, Rejection> {
     debug!("asset_add_label_controller"; "asset_id" => &asset_id, "label" => &label);
 
     let label = AssetLabel::try_from(label.as_str())?;
@@ -342,7 +342,7 @@ async fn asset_add_label_controller(
     let maybe_asset_info = assets_service.get(&asset_id, &GetOptions::default())?;
     let has_image = images_service.has_image(&asset_id).await?;
 
-    Ok(maybe_asset_info.map(|asset_info| Asset::from((asset_info, has_image))))
+    Ok(Asset::from((maybe_asset_info, has_image, true)))
 }
 
 async fn asset_delete_label_controller(
@@ -351,7 +351,7 @@ async fn asset_delete_label_controller(
     assets_service: Arc<impl services::assets::Service>,
     images_service: Arc<impl services::images::Service>,
     admin_assets_service: Arc<impl services::admin_assets::Service>,
-) -> Result<Option<Asset>, Rejection> {
+) -> Result<Asset, Rejection> {
     debug!("asset_delete_label_controller"; "asset_id" => &asset_id, "label" => &label);
 
     let label = AssetLabel::try_from(label.as_str())?;
@@ -361,7 +361,7 @@ async fn asset_delete_label_controller(
     let maybe_asset_info = assets_service.get(&asset_id, &GetOptions::default())?;
     let has_image = images_service.has_image(&asset_id).await?;
 
-    Ok(maybe_asset_info.map(|asset_info| Asset::from((asset_info, has_image))))
+    Ok(Asset::from((maybe_asset_info, has_image, true)))
 }
 
 async fn cache_invalidate_controller<S, BDC, UDDC>(

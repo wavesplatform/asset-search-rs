@@ -12,14 +12,15 @@ use crate::schema::{asset_wx_labels, assets, predefined_verifications};
 #[serde(tag = "type", rename = "list")]
 pub struct List<T> {
     pub data: Vec<T>,
-    pub cursor: Option<String>
+    pub cursor: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename = "asset")]
 pub struct Asset {
-    pub data: AssetInfo,
-    pub metadata: AssetMetadata,
+    pub data: Option<AssetInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<AssetMetadata>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -161,74 +162,91 @@ impl diesel::query_builder::QueryFragment<diesel::pg::Pg> for VerificationStatus
 #[derive(Clone, Debug, Serialize)]
 pub struct OracleData(HashMap<String, DataEntryValue>);
 
-impl From<(crate::models::AssetInfo, bool)> for Asset {
-    fn from(t: (crate::models::AssetInfo, bool)) -> Self {
-        Self {
-            data: AssetInfo {
-                id: t.0.asset.id,
-                name: t.0.asset.name,
-                description: t.0.asset.description,
-                precision: t.0.asset.precision,
-                height: t.0.asset.height,
-                timestamp: t.0.asset.timestamp,
-                sender: t.0.asset.issuer,
-                quantity: t.0.asset.quantity,
-                reissuable: t.0.asset.reissuable,
-                has_script: t.0.asset.smart,
-                smart: t.0.asset.smart,
-                min_sponsored_fee: t.0.asset.min_sponsored_fee,
-                ticker: t.0.asset.ticker,
-            },
-            metadata: AssetMetadata {
-                has_image: t.1,
-                labels: t.0.metadata.labels,
-                oracle_data: t
-                    .0
-                    .metadata
-                    .oracles_data
-                    .into_iter()
-                    .map(|(_oracle_address, oracle_data)| {
-                        let oracle_data =
-                            oracle_data
-                                .into_iter()
-                                .fold(HashMap::new(), |mut acc, cur| {
-                                    match cur.data_type {
-                                        DataEntryType::Bin => {
-                                            acc.insert(
-                                                cur.key,
-                                                DataEntryValue::BinVal(cur.bin_val.unwrap()),
-                                            );
+impl From<(Option<crate::models::AssetInfo>, bool, bool)> for Asset {
+    fn from(
+        (asset_info, has_image, include_metadata): (Option<crate::models::AssetInfo>, bool, bool),
+    ) -> Self {
+        match asset_info {
+            Some(asset_info) => {
+                let ai = AssetInfo {
+                    id: asset_info.asset.id,
+                    name: asset_info.asset.name,
+                    description: asset_info.asset.description,
+                    precision: asset_info.asset.precision,
+                    height: asset_info.asset.height,
+                    timestamp: asset_info.asset.timestamp,
+                    sender: asset_info.asset.issuer,
+                    quantity: asset_info.asset.quantity,
+                    reissuable: asset_info.asset.reissuable,
+                    has_script: asset_info.asset.smart,
+                    smart: asset_info.asset.smart,
+                    min_sponsored_fee: asset_info.asset.min_sponsored_fee,
+                    ticker: asset_info.asset.ticker,
+                };
+                let metadata = AssetMetadata {
+                    has_image: has_image,
+                    labels: asset_info.metadata.labels,
+                    oracle_data: asset_info
+                        .metadata
+                        .oracles_data
+                        .into_iter()
+                        .map(|(_oracle_address, oracle_data)| {
+                            let oracle_data =
+                                oracle_data
+                                    .into_iter()
+                                    .fold(HashMap::new(), |mut acc, cur| {
+                                        match cur.data_type {
+                                            DataEntryType::Bin => {
+                                                acc.insert(
+                                                    cur.key,
+                                                    DataEntryValue::BinVal(cur.bin_val.unwrap()),
+                                                );
+                                            }
+                                            DataEntryType::Bool => {
+                                                acc.insert(
+                                                    cur.key,
+                                                    DataEntryValue::BoolVal(cur.bool_val.unwrap()),
+                                                );
+                                            }
+                                            DataEntryType::Int => {
+                                                acc.insert(
+                                                    cur.key,
+                                                    DataEntryValue::IntVal(cur.int_val.unwrap()),
+                                                );
+                                            }
+                                            DataEntryType::Str => {
+                                                acc.insert(
+                                                    cur.key,
+                                                    DataEntryValue::StrVal(cur.str_val.unwrap()),
+                                                );
+                                            }
                                         }
-                                        DataEntryType::Bool => {
-                                            acc.insert(
-                                                cur.key,
-                                                DataEntryValue::BoolVal(cur.bool_val.unwrap()),
-                                            );
-                                        }
-                                        DataEntryType::Int => {
-                                            acc.insert(
-                                                cur.key,
-                                                DataEntryValue::IntVal(cur.int_val.unwrap()),
-                                            );
-                                        }
-                                        DataEntryType::Str => {
-                                            acc.insert(
-                                                cur.key,
-                                                DataEntryValue::StrVal(cur.str_val.unwrap()),
-                                            );
-                                        }
-                                    }
-                                    acc
-                                });
+                                        acc
+                                    });
 
-                        OracleData(oracle_data)
-                    })
-                    .collect_vec(),
-                sponsor_balance: t.0.metadata.sponsor_balance.map(|sb| match sb.out_leasing {
-                    Some(out_leasing) => sb.regular_balance + out_leasing,
-                    _ => sb.regular_balance,
-                }),
-                verified_status: t.0.metadata.verification_status,
+                            OracleData(oracle_data)
+                        })
+                        .collect_vec(),
+                    sponsor_balance: asset_info.metadata.sponsor_balance.map(|sb| {
+                        match sb.out_leasing {
+                            Some(out_leasing) => sb.regular_balance + out_leasing,
+                            _ => sb.regular_balance,
+                        }
+                    }),
+                    verified_status: asset_info.metadata.verification_status,
+                };
+                Self {
+                    data: Some(ai),
+                    metadata: if include_metadata {
+                        Some(metadata)
+                    } else {
+                        None
+                    },
+                }
+            }
+            _ => Self {
+                data: None,
+                metadata: None,
             },
         }
     }

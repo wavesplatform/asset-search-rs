@@ -1,6 +1,8 @@
 use bytes::{BufMut, BytesMut};
 use std::convert::TryInto;
 
+use crate::models::AssetInfo;
+
 pub fn keccak256(message: &[u8]) -> [u8; 32] {
     use sha3::{Digest, Keccak256};
 
@@ -109,4 +111,67 @@ pub fn get_asset_id<I: AsRef<[u8]>>(input: I) -> String {
 
 pub fn is_waves_asset_id<I: AsRef<[u8]>>(input: I) -> bool {
     get_asset_id(input) == WAVES_ID
+}
+
+pub fn is_nft_asset(a: &AssetInfo) -> bool {
+    a.asset.quantity == 1 && a.asset.precision == 0 && !a.asset.reissuable
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use std::collections::HashMap;
+
+    use crate::models::{Asset, AssetInfo, AssetMetadata, VerificationStatus};
+
+    use super::is_nft_asset;
+
+    #[test]
+    fn should_recognize_nft_asset() {
+        // quantity, precision, reissuable, expected
+        let test_cases = [
+            (0, 0, false, false),
+            (0, 0, true, false),
+            (0, 1, false, false),
+            (0, 1, true, false),
+            (1, 0, false, true),
+            (1, 0, true, false),
+            (1, 1, false, false),
+            (1, 1, true, false),
+            (2, 0, false, false),
+            (2, 0, true, false),
+            (2, 1, false, false),
+            (2, 1, true, false),
+        ];
+
+        test_cases.iter().for_each(|tc| {
+            let quantity = tc.0;
+            let precision = tc.1;
+            let reissuable = tc.2;
+            let a = AssetInfo {
+                asset: Asset {
+                    quantity,
+                    precision,
+                    reissuable,
+                    id: "a1".to_owned(),
+                    name: "a1".to_owned(),
+                    description: "".to_owned(),
+                    height: 1,
+                    timestamp: Utc::now(),
+                    issuer: "issuer".to_owned(),
+                    min_sponsored_fee: None,
+                    smart: false,
+                    ticker: None,
+                },
+                metadata: AssetMetadata {
+                    verification_status: VerificationStatus::Unknown,
+                    labels: vec![],
+                    sponsor_balance: None,
+                    oracles_data: HashMap::new(),
+                },
+            };
+
+            assert_eq!(tc.3, is_nft_asset(&a));
+        });
+    }
 }

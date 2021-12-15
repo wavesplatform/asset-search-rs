@@ -13,6 +13,21 @@ pub enum AssetWxLabelValueType {
     CommunityVerified,
 }
 
+impl Display for AssetWxLabelValueType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DeFi => f.write_str("'defi'::asset_wx_label_value_type"),
+            Self::Gateway => f.write_str("'gateway'::asset_wx_label_value_type"),
+            Self::Stablecoin => f.write_str("'stablecoin'::asset_wx_label_value_type"),
+            Self::Qualified => f.write_str("'qualified'::asset_wx_label_value_type"),
+            Self::WaVerified => f.write_str("'wa_verified'::asset_wx_label_value_type"),
+            Self::CommunityVerified => {
+                f.write_str("'community_verified'::asset_wx_label_value_type")
+            }
+        }
+    }
+}
+
 #[derive(DbEnum, Clone, Debug)]
 pub enum DataEntryValueType {
     Bin,

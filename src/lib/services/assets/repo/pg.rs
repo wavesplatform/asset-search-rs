@@ -1,11 +1,16 @@
+use std::convert::TryFrom;
+
 use diesel::dsl::sql;
+use diesel::pg::Pg;
 use diesel::sql_types::{Array, BigInt, Integer, Text};
-use diesel::{prelude::*, sql_query};
+use diesel::{debug_query, prelude::*, sql_query};
 use itertools::Itertools;
 use wavesexchange_log::error;
 
 use super::{Asset, AssetId, FindParams, OracleDataEntry, Repo, TickerFilter, UserDefinedData};
-use crate::db::enums::{DataEntryValueTypeMapping, VerificationStatusValueType};
+use crate::db::enums::{
+    AssetWxLabelValueType, DataEntryValueTypeMapping, VerificationStatusValueType,
+};
 use crate::db::PgPool;
 use crate::error::Error as AppError;
 use crate::models::AssetLabel;
@@ -13,7 +18,7 @@ use crate::schema::data_entries;
 
 const MAX_UID: i64 = i64::MAX - 1;
 
-const ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY: &str = "SELECT 
+const ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY: &str = "SELECT DISTINCT ON (a.id)
     a.id,
     a.name,
     a.precision,
@@ -83,19 +88,25 @@ impl Repo for PgRepo {
 
         if let Some(asset_labels) = params.asset_label_in {
             if asset_labels.contains(&AssetLabel::WithoutLabels) {
-                conditions.push(format!(
-                    "(asset_wx_labels = ANY(ARRAY[{}) OR asset_wx_labels IS NULL",
-                    asset_labels
-                        .iter()
-                        .filter(|al| **al != AssetLabel::WithoutLabels)
-                        .map(|al| format!("'{}'", al))
-                        .join(",")
-                ));
+                asset_labels
+                    .iter()
+                    .filter(|al| **al != AssetLabel::WithoutLabels)
+                    .map(|al| AssetWxLabelValueType::try_from(al).map(|al| format!("{}", al)))
+                    .collect::<Result<Vec<_>, AppError>>()
+                    .map(|ss| {
+                        conditions.push(format!(
+                            "(awl.label = ANY(ARRAY[{}]) OR awl IS NULL",
+                            ss.join(",")
+                        ))
+                    })?;
             } else {
-                conditions.push(format!(
-                    "asset_wx_labels = ANY(ARRAY[{})",
-                    asset_labels.iter().map(|al| format!("'{}'", al)).join(",")
-                ));
+                asset_labels
+                    .iter()
+                    .map(|al| AssetWxLabelValueType::try_from(al).map(|al| format!("{}", al)))
+                    .collect::<Result<Vec<_>, AppError>>()
+                    .map(|ss| {
+                        conditions.push(format!("awl.label = ANY(ARRAY[{}])", ss.join(",")))
+                    })?;
             }
         }
 
@@ -157,7 +168,7 @@ impl Repo for PgRepo {
                     a.id,
                     ROW_NUMBER() OVER (ORDER BY a.block_uid ASC, a.id ASC) AS rn
                 FROM
-                    (SELECT a.id, (SELECT min(block_uid) FROM assets WHERE id = a.id) AS block_uid FROM assets AS a WHERE a.superseded_by = {} AND a.nft = {}) AS a
+                    (SELECT a.id, a.smart, (SELECT min(block_uid) FROM assets WHERE id = a.id) AS block_uid FROM assets AS a WHERE a.superseded_by = {} AND a.nft = {}) AS a
                 LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id
                 LEFT JOIN asset_wx_labels AS awl ON awl.asset_id = a.id
                 WHERE {}
@@ -183,6 +194,9 @@ impl Repo for PgRepo {
         let q = sql_query(format!("{} ORDER BY a.rn LIMIT $1", query))
             .bind::<Integer, _>(params.limit as i32);
 
+        let dbg = debug_query::<Pg, _>(&q).to_string();
+        println!("DEBUG: {}", dbg);
+
         q.load(&self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
             AppError::from(e)
@@ -191,7 +205,7 @@ impl Repo for PgRepo {
 
     fn get(&self, id: &str) -> Result<Option<Asset>, AppError> {
         let q = sql_query(&format!(
-            "{} WHERE a.superseded_by = $1 AND a.id = $2 LIMIT 1",
+            "{} WHERE a.nft = false AND a.superseded_by = $1 AND a.id = $2 ORDER BY a.id, a.uid DESC LIMIT 1",
             ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY
         ))
         .bind::<BigInt, _>(MAX_UID)
@@ -205,7 +219,7 @@ impl Repo for PgRepo {
 
     fn mget(&self, ids: &[&str]) -> Result<Vec<Option<Asset>>, AppError> {
         let q = sql_query(&format!(
-            "{} WHERE a.superseded_by = $1 AND a.id = ANY($2)",
+            "{} WHERE a.nft = false AND a.superseded_by = $1 AND a.id = ANY($2) ORDER BY a.id, a.uid DESC",
             ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY
         ))
         .bind::<BigInt, _>(MAX_UID)
@@ -219,10 +233,13 @@ impl Repo for PgRepo {
 
     fn mget_for_height(&self, ids: &[&str], height: i32) -> Result<Vec<Option<Asset>>, AppError> {
         let q = sql_query(&format!("
-            {} WHERE a.id = ANY($2) AND a.block_uid <= (SELECT uid FROM blocks_microblocks WHERE height = $3 LIMIT 1)", ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY))
+            {} WHERE a.nft = false AND a.id = ANY($2) AND a.block_uid <= (SELECT uid FROM blocks_microblocks WHERE height = $3 LIMIT 1) ORDER BY a.id, a.uid DESC", ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY))
             .bind::<BigInt, _>(MAX_UID)
             .bind::<Array<Text>, _>(ids)
             .bind::<Integer, _>(height);
+
+        let dbg = debug_query::<Pg, _>(&q).to_string();
+        println!("DEBUG: {}", dbg);
 
         q.load(&self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);

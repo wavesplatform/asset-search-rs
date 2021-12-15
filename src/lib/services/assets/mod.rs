@@ -11,6 +11,7 @@ use crate::cache;
 use crate::cache::{AssetBlockchainData, AssetUserDefinedData};
 use crate::error::Error as AppError;
 use crate::models::AssetInfo;
+use crate::waves::is_nft_asset;
 
 use entities::UserDefinedData;
 use repo::{FindParams, TickerFilter};
@@ -160,7 +161,7 @@ impl Service for AssetsService {
     }
 
     fn mget(&self, ids: &[&str], opts: &MgetOptions) -> Result<Vec<Option<AssetInfo>>, AppError> {
-        match opts.height {
+        let assets = match opts.height {
             Some(height) => {
                 let assets = self.repo.mget_for_height(ids, height)?;
 
@@ -221,7 +222,7 @@ impl Service for AssetsService {
                     })
                     .collect::<Result<Vec<_>, AppError>>()?;
 
-                Ok(assets_info)
+                assets_info
             }
             None => {
                 let cached_assets = if opts.bypass_cache {
@@ -350,9 +351,19 @@ impl Service for AssetsService {
                             acc
                         });
 
-                Ok(ids.iter().map(|id| assets.get(*id).cloned()).collect_vec())
+                ids.iter().map(|id| assets.get(*id).cloned()).collect_vec()
             }
-        }
+        };
+
+        let nft_filtered_assets = assets
+            .into_iter()
+            .filter(|o| match o {
+                Some(ai) => !is_nft_asset(ai),
+                None => false,
+            })
+            .collect::<Vec<_>>();
+
+        Ok(nft_filtered_assets)
     }
 
     fn search(&self, req: &SearchRequest) -> Result<Vec<String>, AppError> {

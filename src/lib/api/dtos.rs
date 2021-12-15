@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 use crate::models::{AssetLabel, VerificationStatus};
 
@@ -9,6 +9,7 @@ pub struct SearchRequest {
     pub ids: Option<Vec<String>>,
     pub ticker: Option<String>,
     pub search: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_bool_from_string")]
     pub smart: Option<bool>,
     pub verified_status: Option<Vec<VerificationStatus>>,
     #[serde(rename = "label__in")]
@@ -50,4 +51,59 @@ pub struct RequestOptions {
 pub enum ResponseFormat {
     Full,
     Brief,
+}
+
+fn deserialize_optional_bool_from_string<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    match String::deserialize(deserializer) {
+        Ok(s) => {
+            if s.to_lowercase() == "true" {
+                Ok(Some(true))
+            } else if s.to_lowercase() == "false" {
+                Ok(Some(false))
+            } else {
+                Err(serde::de::Error::custom(format!(
+                    "Got unexpected string while deserializing bool from string: {}",
+                    s
+                )))
+            }
+        }
+        Err(e) => {
+            println!("Error occurred while deserializing optinal bool from string");
+            Err(e)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde::Deserialize;
+
+    use super::deserialize_optional_bool_from_string;
+
+    #[derive(Deserialize, Debug, Clone)]
+    pub struct Element {
+        #[serde(default, deserialize_with = "deserialize_optional_bool_from_string")]
+        value: Option<bool>,
+    }
+
+    #[test]
+    fn should_deserialize_optional_bool_from_string() {
+        let e: Element = serde_qs::from_str(r#""#).unwrap();
+        assert_eq!(e.value, None);
+
+        let e: Element = serde_qs::from_str(r#"value=true"#).unwrap();
+        assert_eq!(e.value, Some(true));
+
+        let e: Element = serde_qs::from_str(r#"value=True"#).unwrap();
+        assert_eq!(e.value, Some(true));
+
+        let e: Element = serde_qs::from_str(r#"value=false"#).unwrap();
+        assert_eq!(e.value, Some(false));
+
+        let r: Result<Option<bool>, _> = serde_qs::from_str(r#"value=asd"#);
+        assert!(matches!(r, Err(_)));
+    }
 }

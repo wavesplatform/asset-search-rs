@@ -94,10 +94,11 @@ async fn assets_get_controller(
     images_service: Arc<impl services::images::Service>,
     req: SearchRequest,
     opts: RequestOptions,
-) -> Result<List<Option<Asset>>, Rejection> {
+) -> Result<List<Asset>, Rejection> {
     debug!("assets_get_controller"; "req" => format!("{:?}", req));
 
     let limit = req.limit.unwrap_or(DEFAULT_LIMIT);
+    let include_metadata = opts.include_metadata.unwrap_or(true);
 
     let asset_ids: Vec<String> = if let Some(ids) = req.ids {
         ids
@@ -112,7 +113,11 @@ async fn assets_get_controller(
         false
     };
 
-    let asset_ids = asset_ids.iter().map(AsRef::as_ref).collect_vec();
+    let asset_ids = asset_ids
+        .iter()
+        .take(limit as usize)
+        .map(AsRef::as_ref)
+        .collect_vec();
 
     let mget_options = match opts.height_gte {
         Some(height) => MgetOptions::with_height(height),
@@ -123,18 +128,16 @@ async fn assets_get_controller(
 
     let has_images = images_service.has_images(&asset_ids).await?;
 
-    debug!("assets: {:?}", assets);
-
     let assets = assets
         .into_iter()
         .zip(has_images)
-        .map(|(o, has_image)| o.map(|a| Asset::from((a, has_image))))
+        .map(|(o, has_image)| Asset::from((o, has_image, include_metadata)))
         .collect_vec();
 
     let last_cursor = if has_next_page {
         assets
             .last()
-            .and_then(|o| o.as_ref().map(|a| a.data.id.clone()))
+            .and_then(|a| a.data.as_ref().map(|ai| ai.id.clone()))
     } else {
         None
     };
@@ -152,8 +155,10 @@ async fn assets_post_controller(
     images_service: Arc<impl services::images::Service>,
     req: MgetRequest,
     opts: RequestOptions,
-) -> Result<List<Option<Asset>>, Rejection> {
+) -> Result<List<Asset>, Rejection> {
     debug!("assets_post_controller");
+    let include_metadata = opts.include_metadata.unwrap_or(true);
+
     let asset_ids = req.ids.iter().map(AsRef::as_ref).collect_vec();
 
     let mget_options = match opts.height_gte {
@@ -169,7 +174,7 @@ async fn assets_post_controller(
         data: assets
             .into_iter()
             .zip(has_images)
-            .map(|(o, has_image)| o.map(|a| (a, has_image).into()))
+            .map(|(o, has_image)| Asset::from((o, has_image, include_metadata)))
             .collect_vec(),
         cursor: None,
     };

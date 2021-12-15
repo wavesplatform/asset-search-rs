@@ -169,7 +169,9 @@ pub enum AssetLabel {
     DeFi,
     Stablecoin,
     Qualified,
+    #[serde(rename = "WA_VERIFIED")]
     WaVerified,
+    #[serde(rename = "COMMUNITY_VERIFIED")]
     CommunityVerified,
     #[serde(rename = "null")]
     WithoutLabels,
