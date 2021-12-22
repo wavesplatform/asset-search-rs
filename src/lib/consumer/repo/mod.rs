@@ -67,6 +67,8 @@ pub trait Repo {
         oracle_address: &str,
     ) -> Result<Vec<OracleDataEntry>>;
 
+    fn issuer_assets(&self, issuer_address: impl AsRef<str>) -> Result<Vec<QueryableAsset>>;
+
     //
     // DATA ENTRIES
     //

@@ -3,17 +3,18 @@ use diesel::{
     sql_types::{Array, BigInt, Bool, Integer, Nullable, Text, Timestamptz},
     Queryable,
 };
-use std::{collections::HashMap, convert::TryFrom};
-use wavesexchange_log::debug;
+use std::collections::HashMap;
 
-use crate::cache::{AssetBlockchainData, AssetUserDefinedData};
-use crate::db::enums::{
-    AssetWxLabelValueType, AssetWxLabelValueTypeMapping, DataEntryValueType,
-    VerificationStatusValueType, VerificationStatusValueTypeMapping,
-};
-use crate::error::Error as AppError;
-use crate::models::{
-    AssetLabel, AssetOracleDataEntry, AssetSponsorBalance, DataEntryType, VerificationStatus,
+use crate::{
+    cache::{AssetBlockchainData, AssetUserDefinedData},
+    db::enums::{
+        AssetWxLabelValueType, AssetWxLabelValueTypeMapping, DataEntryValueType,
+        VerificationStatusValueType, VerificationStatusValueTypeMapping,
+    },
+    error::Error as AppError,
+    models::{
+        AssetLabel, AssetOracleDataEntry, AssetSponsorBalance, DataEntryType, VerificationStatus,
+    },
 };
 
 #[derive(Clone, Debug, QueryableByName)]
@@ -73,17 +74,16 @@ impl From<&OracleDataEntry> for AssetOracleDataEntry {
     }
 }
 
-impl TryFrom<(&Asset, &HashMap<String, Vec<OracleDataEntry>>)> for AssetBlockchainData {
-    type Error = AppError;
-
-    fn try_from(
-        (asset, oracles_data): (&Asset, &HashMap<String, Vec<OracleDataEntry>>),
-    ) -> Result<Self, Self::Error> {
+impl AssetBlockchainData {
+    pub fn try_from_asset_and_oracles_data(
+        asset: &Asset,
+        oracles_data: &HashMap<String, Vec<OracleDataEntry>>,
+    ) -> Result<Self, AppError> {
         let sponsor_balance = if asset.min_sponsored_fee.is_some() {
             Some(AssetSponsorBalance {
                 regular_balance: asset.sponsor_regular_balance.ok_or(
                     AppError::ConsistencyError(format!(
-                        "Expected asset#{} sponsor#{} regular balance",
+                        "Expected asset {} sponsor ({}) regular balance",
                         asset.id, asset.issuer
                     )),
                 )?,
@@ -140,10 +140,7 @@ impl From<&UserDefinedData> for AssetUserDefinedData {
         let labels = d
             .labels
             .iter()
-            .map(|l| {
-                debug!("try to parse assetWxLabelValueType: {:?}", l);
-                AssetLabel::from(l)
-            })
+            .map(|l| AssetLabel::from(l))
             .collect::<Vec<_>>();
         Self {
             asset_id: d.asset_id.clone(),

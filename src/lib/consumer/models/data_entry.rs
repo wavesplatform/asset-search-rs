@@ -1,5 +1,6 @@
 use std::hash::{Hash, Hasher};
 
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use crate::db::enums::DataEntryValueType;
@@ -67,7 +68,8 @@ impl Hash for DeletedDataEntry {
 
 #[derive(Clone, Debug)]
 pub struct DataEntryUpdate {
-    pub height: i32,
+    pub update_height: i32,
+    pub updated_at: DateTime<Utc>,
     pub address: String,
     pub key: String,
     pub value: Option<DataEntryValue>,

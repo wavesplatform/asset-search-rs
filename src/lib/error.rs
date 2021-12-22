@@ -46,6 +46,8 @@ pub enum Error {
     JoinError(#[from] tokio::task::JoinError),
     #[error("InvalidateCacheError: {0}")]
     InvalidateCacheError(String),
+    #[error("IncosistDataError: {0}")]
+    IncosistDataError(String),
 }
 
 impl Reject for Error {}

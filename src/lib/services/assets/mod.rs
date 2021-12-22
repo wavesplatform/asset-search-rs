@@ -3,8 +3,8 @@ pub mod entities;
 pub mod repo;
 
 use itertools::Itertools;
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::{collections::HashMap, convert::TryFrom};
 
 pub use self::dtos::SearchRequest;
 use crate::cache;
@@ -127,7 +127,10 @@ impl Service for AssetsService {
 
             let not_cached_asset_with_oracles_data = match not_cached_asset {
                 Some(a) => {
-                    let abd = AssetBlockchainData::try_from((&a, &asset_oracles_data))?;
+                    let abd = AssetBlockchainData::try_from_asset_and_oracles_data(
+                        &a,
+                        &asset_oracles_data,
+                    )?;
                     Some(abd)
                 }
                 _ => None,
@@ -202,8 +205,10 @@ impl Service for AssetsService {
                                 assets_oracles_data.get(&a.id).cloned().unwrap_or_default();
 
                             let asset_blockchain_data =
-                                AssetBlockchainData::try_from((&a, &asset_oracles_data))
-                                    .map(|ai| ai)?;
+                                AssetBlockchainData::try_from_asset_and_oracles_data(
+                                    &a,
+                                    &asset_oracles_data,
+                                )?;
 
                             // user defined data exists for all existing assets
                             // therefore unwrap-safety is guaranteed
@@ -277,7 +282,10 @@ impl Service for AssetsService {
                                     .unwrap_or_default();
 
                                 let asset_blockchain_data =
-                                    AssetBlockchainData::try_from((&a, &asset_oracles_data))?;
+                                    AssetBlockchainData::try_from_asset_and_oracles_data(
+                                        &a,
+                                        &asset_oracles_data,
+                                    )?;
 
                                 Ok(Some(asset_blockchain_data))
                             }
@@ -358,7 +366,9 @@ impl Service for AssetsService {
         let nft_filtered_assets = assets
             .into_iter()
             .filter(|o| match o {
-                Some(ai) => !is_nft_asset(ai),
+                Some(ai) => {
+                    !is_nft_asset(ai.asset.quantity, ai.asset.precision, ai.asset.reissuable)
+                }
                 None => false,
             })
             .collect::<Vec<_>>();

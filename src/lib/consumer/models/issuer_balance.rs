@@ -1,6 +1,18 @@
 use std::hash::{Hash, Hasher};
 
+use chrono::{DateTime, Utc};
+use waves_protobuf_schemas::waves::Amount;
+
 use crate::schema::issuer_balances;
+
+#[derive(Clone, Debug)]
+pub struct Update {
+    pub updated_at: DateTime<Utc>,
+    pub update_height: u32,
+    pub address: Vec<u8>,
+    pub amount_after: Option<Amount>,
+    pub amount_before: i64,
+}
 
 #[derive(Clone, Debug, Insertable)]
 #[table_name = "issuer_balances"]
@@ -75,6 +87,8 @@ impl Hash for CurrentIssuerBalance {
 
 #[derive(Clone, Debug)]
 pub struct IssuerBalanceUpdate {
+    pub updated_at: DateTime<Utc>,
+    pub update_height: i32,
     pub address: String,
     pub new_regular_balance: i64,
 }

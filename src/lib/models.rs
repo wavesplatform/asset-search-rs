@@ -8,6 +8,7 @@ use std::fmt::Display;
 
 use crate::db::enums::{AssetWxLabelValueType, DataEntryValueType, VerificationStatusValueType};
 use crate::error::Error as AppError;
+use crate::waves::{WAVES_ID, WAVES_NAME, WAVES_PRECISION};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AssetInfo {
@@ -248,106 +249,44 @@ impl Display for AssetLabel {
 impl NonAggregate for AssetLabel {}
 
 #[derive(Clone, Debug)]
-pub struct AssetInfoUpdate {
-    // Asset
+pub enum AssetInfoUpdate {
+    Base(BaseAssetInfoUpdate),
+    SponsorRegularBalance(i64),
+    SponsorOutLeasing(i64),
+    OraclesData(HashMap<String, Vec<AssetOracleDataEntry>>),
+}
+
+#[derive(Clone, Debug)]
+pub struct BaseAssetInfoUpdate {
     pub id: String,
-    // updatable fields
+    pub issuer: String,
+    pub precision: i32,
+    pub nft: bool,
     pub updated_at: DateTime<Utc>,
     pub update_height: i32,
-    // mutable fields
-    pub name: Option<String>,
-    pub description: Option<String>,
-    pub smart: Option<bool>,
-    pub quantity: Option<i64>,
-    pub reissuable: Option<bool>,
+    pub name: String,
+    pub description: String,
+    pub smart: bool,
+    pub quantity: i64,
+    pub reissuable: bool,
     pub min_sponsored_fee: Option<i64>,
-    // AssetMetadata mutable fields
-    pub sponsor_regular_balance: Option<i64>,
-    pub sponsor_out_leasing: Option<i64>,
-    // Address -> Vec<DataEntry>
-    pub oracles_data: Option<HashMap<String, Vec<AssetOracleDataEntry>>>,
 }
 
-impl Default for AssetInfoUpdate {
-    fn default() -> Self {
-        AssetInfoUpdate {
-            id: String::default(),
-            updated_at: Utc::now(),
-            update_height: 0,
-            // mutable fields
-            name: None,
-            description: None,
-            smart: None,
-            quantity: None,
-            reissuable: None,
-            min_sponsored_fee: None,
-            // AssetMetadata mutable fields
-            sponsor_regular_balance: None,
-            sponsor_out_leasing: None,
-            oracles_data: None,
-        }
-    }
-}
-
-/// Produces AssetInfo applying specified AssetInfoUpdate to specified AssetInfo
-impl From<(&AssetInfo, &AssetInfoUpdate)> for AssetInfo {
-    fn from((current_asset_info, update): (&AssetInfo, &AssetInfoUpdate)) -> Self {
-        let sponsor_balance = if current_asset_info.asset.min_sponsored_fee.is_some()
-            || update.min_sponsored_fee.is_some()
-        {
-            current_asset_info
-                .metadata
-                .sponsor_balance
-                .as_ref()
-                .map(|sponsor_balance| AssetSponsorBalance {
-                    regular_balance: update
-                        .sponsor_regular_balance
-                        .unwrap_or(sponsor_balance.regular_balance),
-                    out_leasing: update.sponsor_out_leasing.or(sponsor_balance.out_leasing),
-                })
-                .or(Some(AssetSponsorBalance {
-                    regular_balance: update.sponsor_regular_balance.expect(&format!(
-                        "Expected asset {} sponsor {} regular balance",
-                        update.id, current_asset_info.asset.issuer
-                    )),
-                    out_leasing: update.sponsor_out_leasing,
-                }))
-        } else {
-            None
-        };
-
+impl BaseAssetInfoUpdate {
+    pub fn waves_update(height: i32, time_stamp: DateTime<Utc>, quantity: i64) -> Self {
         Self {
-            asset: Asset {
-                id: current_asset_info.asset.id.clone(),
-                name: update
-                    .name
-                    .clone()
-                    .unwrap_or(current_asset_info.asset.name.clone()),
-                precision: current_asset_info.asset.precision,
-                description: update
-                    .description
-                    .clone()
-                    .unwrap_or(current_asset_info.asset.description.clone()),
-                height: update.update_height,
-                timestamp: update.updated_at,
-                issuer: current_asset_info.asset.issuer.clone(),
-                quantity: update.quantity.unwrap_or(current_asset_info.asset.quantity),
-                reissuable: update
-                    .reissuable
-                    .unwrap_or(current_asset_info.asset.reissuable),
-                min_sponsored_fee: update.min_sponsored_fee,
-                smart: update.smart.unwrap_or(current_asset_info.asset.smart),
-                ticker: current_asset_info.asset.ticker.clone(),
-            },
-            metadata: AssetMetadata {
-                verification_status: current_asset_info.metadata.verification_status.clone(),
-                labels: current_asset_info.metadata.labels.clone(),
-                oracles_data: update
-                    .oracles_data
-                    .clone()
-                    .unwrap_or(current_asset_info.metadata.oracles_data.clone()),
-                sponsor_balance,
-            },
+            id: WAVES_ID.to_owned(),
+            issuer: "".to_owned(),
+            precision: WAVES_PRECISION.to_owned(),
+            nft: false,
+            updated_at: time_stamp,
+            update_height: height,
+            name: WAVES_NAME.to_owned(),
+            description: "".to_owned(),
+            smart: false,
+            quantity,
+            reissuable: false,
+            min_sponsored_fee: None,
         }
     }
 }

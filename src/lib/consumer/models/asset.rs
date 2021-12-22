@@ -8,12 +8,9 @@ use std::{
 use crate::{
     cache::AssetBlockchainData,
     db::enums::DataEntryValueType,
-    models::{
-        Asset as AssetModel, AssetInfo, AssetInfoUpdate, AssetMetadata, AssetOracleDataEntry,
-        AssetSponsorBalance, DataEntryType, VerificationStatus,
-    },
+    models::{AssetOracleDataEntry, AssetSponsorBalance, BaseAssetInfoUpdate, DataEntryType},
     schema::assets,
-    waves::{WAVES_ID, WAVES_NAME, WAVES_PRECISION},
+    waves::is_nft_asset,
 };
 
 #[derive(Clone, Debug, Insertable)]
@@ -75,118 +72,6 @@ impl Hash for DeletedAsset {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Asset {
-    pub height: i32,
-    pub time_stamp: DateTime<Utc>,
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub issuer: String,
-    pub precision: i32,
-    pub smart: bool,
-    pub nft: bool,
-    pub quantity: i64,
-    pub reissuable: bool,
-    pub min_sponsored_fee: Option<i64>,
-}
-
-impl Asset {
-    pub fn waves_update(height: i32, time_stamp: DateTime<Utc>, quantity: i64) -> Self {
-        Self {
-            height,
-            time_stamp,
-            quantity,
-            id: WAVES_ID.to_owned(),
-            name: WAVES_NAME.to_owned(),
-            description: "".to_owned(),
-            precision: WAVES_PRECISION.to_owned(),
-            issuer: "".to_owned(),
-            smart: false,
-            nft: false,
-            reissuable: false,
-            min_sponsored_fee: None,
-        }
-    }
-}
-
-impl From<(&Asset, &AssetInfoUpdate)> for AssetInfo {
-    fn from((asset, update): (&Asset, &AssetInfoUpdate)) -> Self {
-        let sponsor_balance =
-            if asset.min_sponsored_fee.is_some() || update.min_sponsored_fee.is_some() {
-                Some(AssetSponsorBalance {
-                    regular_balance: update.sponsor_regular_balance.expect(&format!(
-                        "Expected sponsor {} regular balance while producing new asset info for {}",
-                        asset.issuer, asset.id
-                    )),
-                    out_leasing: update.sponsor_out_leasing,
-                })
-            } else {
-                None
-            };
-
-        Self {
-            asset: AssetModel {
-                id: asset.id.clone(),
-                name: update.name.clone().unwrap_or(asset.name.clone()),
-                precision: asset.precision,
-                description: update
-                    .description
-                    .clone()
-                    .unwrap_or(asset.description.clone()),
-                height: update.update_height,
-                timestamp: update.updated_at,
-                issuer: asset.issuer.clone(),
-                quantity: update.quantity.unwrap_or(asset.quantity),
-                reissuable: update.reissuable.unwrap_or(asset.reissuable),
-                min_sponsored_fee: update.min_sponsored_fee,
-                smart: update.smart.unwrap_or(asset.smart),
-                ticker: None,
-            },
-            metadata: AssetMetadata {
-                verification_status: VerificationStatus::default(),
-                labels: vec![],
-                oracles_data: update.oracles_data.clone().unwrap_or_default(),
-                sponsor_balance,
-            },
-        }
-    }
-}
-
-impl From<(&Asset, &AssetInfoUpdate)> for AssetBlockchainData {
-    fn from((current, update): (&Asset, &AssetInfoUpdate)) -> Self {
-        Self {
-            id: current.id.clone(),
-            name: update.name.clone().unwrap_or(current.name.clone()),
-            precision: current.precision,
-            description: update
-                .description
-                .clone()
-                .unwrap_or(current.description.clone()),
-            height: update.update_height,
-            timestamp: update.updated_at,
-            issuer: current.issuer.clone(),
-            quantity: update.quantity.unwrap_or(current.quantity),
-            reissuable: update.reissuable.unwrap_or(current.reissuable),
-            min_sponsored_fee: update.min_sponsored_fee,
-            smart: update.smart.unwrap_or(current.smart),
-            oracles_data: update.oracles_data.clone().unwrap_or_default(),
-            sponsor_balance: if update.min_sponsored_fee.is_some()
-                || current.min_sponsored_fee.is_some()
-            {
-                update
-                    .sponsor_regular_balance
-                    .map(|srb| AssetSponsorBalance {
-                        regular_balance: srb,
-                        out_leasing: update.sponsor_out_leasing,
-                    })
-            } else {
-                None
-            },
-        }
-    }
-}
-
 #[derive(Clone, Debug, QueryableByName)]
 pub struct QueryableAsset {
     #[sql_type = "Text"]
@@ -217,6 +102,25 @@ pub struct QueryableAsset {
     pub sponsor_out_leasing: Option<i64>,
 }
 
+impl From<&QueryableAsset> for BaseAssetInfoUpdate {
+    fn from(a: &QueryableAsset) -> Self {
+        Self {
+            id: a.id.clone(),
+            issuer: a.issuer.clone(),
+            precision: a.precision,
+            nft: is_nft_asset(a.quantity, a.precision, a.reissuable),
+            update_height: a.height,
+            updated_at: a.timestamp.clone(),
+            name: a.name.clone(),
+            description: a.description.clone(),
+            smart: a.smart,
+            quantity: a.quantity,
+            reissuable: a.reissuable,
+            min_sponsored_fee: a.min_sponsored_fee,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Queryable)]
 pub struct OracleDataEntry {
     pub asset_id: String,
@@ -244,29 +148,30 @@ impl From<&OracleDataEntry> for AssetOracleDataEntry {
     }
 }
 
-impl From<(&QueryableAsset, &HashMap<String, Vec<AssetOracleDataEntry>>)> for AssetBlockchainData {
-    fn from(
-        (update, oracles_data): (&QueryableAsset, &HashMap<String, Vec<AssetOracleDataEntry>>),
+impl AssetBlockchainData {
+    pub fn from_asset_and_oracles_data(
+        asset: &QueryableAsset,
+        oracles_data: &HashMap<String, Vec<AssetOracleDataEntry>>,
     ) -> Self {
         Self {
-            id: update.id.clone(),
-            name: update.name.clone(),
-            precision: update.precision,
-            description: update.description.clone(),
-            height: update.height,
-            timestamp: update.timestamp,
-            issuer: update.issuer.clone(),
-            quantity: update.quantity,
-            reissuable: update.reissuable,
-            min_sponsored_fee: update.min_sponsored_fee,
-            smart: update.smart,
+            id: asset.id.clone(),
+            name: asset.name.clone(),
+            precision: asset.precision,
+            description: asset.description.clone(),
+            height: asset.height,
+            timestamp: asset.timestamp,
+            issuer: asset.issuer.clone(),
+            quantity: asset.quantity,
+            reissuable: asset.reissuable,
+            min_sponsored_fee: asset.min_sponsored_fee,
+            smart: asset.smart,
             oracles_data: oracles_data.to_owned(),
-            sponsor_balance: if update.min_sponsored_fee.is_some() {
-                update
+            sponsor_balance: if asset.min_sponsored_fee.is_some() {
+                asset
                     .sponsor_regular_balance
                     .map(|srb| AssetSponsorBalance {
                         regular_balance: srb,
-                        out_leasing: update.sponsor_out_leasing,
+                        out_leasing: asset.sponsor_out_leasing,
                     })
             } else {
                 None

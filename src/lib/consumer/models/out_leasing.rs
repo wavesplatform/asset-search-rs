@@ -1,6 +1,16 @@
 use std::hash::{Hash, Hasher};
 
+use chrono::{DateTime, Utc};
+
 use crate::schema::out_leasings;
+
+#[derive(Clone, Debug)]
+pub struct Update {
+    pub updated_at: DateTime<Utc>,
+    pub update_height: u32,
+    pub address: Vec<u8>,
+    pub out_after: i64,
+}
 
 #[derive(Clone, Debug, Insertable)]
 #[table_name = "out_leasings"]
@@ -55,6 +65,8 @@ impl Hash for DeletedOutLeasing {
 
 #[derive(Clone, Debug)]
 pub struct OutLeasingUpdate {
+    pub updated_at: DateTime<Utc>,
+    pub update_height: i32,
     pub address: String,
     pub new_amount: i64,
 }

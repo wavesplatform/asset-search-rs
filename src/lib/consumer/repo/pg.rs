@@ -329,6 +329,36 @@ impl Repo for PgRepoImpl {
         })
     }
 
+    fn issuer_assets(&self, issuer: impl AsRef<str>) -> Result<Vec<QueryableAsset>> {
+        let q = sql_query("SELECT 
+            a.id,
+            a.name,
+            a.precision,
+            a.description,
+            bm.height,
+            a.time_stamp as timestamp,
+            a.issuer,
+            a.quantity,
+            a.reissuable,
+            a.min_sponsored_fee,
+            a.smart,
+            CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ib.regular_balance END AS sponsor_regular_balance,
+            CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ol.amount END          AS sponsor_out_leasing
+            FROM assets AS a
+            LEFT JOIN blocks_microblocks bm ON a.block_uid = bm.uid
+            LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = $1
+            LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = $1
+            WHERE a.superseded_by = $1 AND a.issuer = $2"
+        )
+        .bind::<BigInt, _>(MAX_UID)
+        .bind::<Text, _>(issuer.as_ref());
+
+        q.load(&self.conn).map_err(|err| {
+            let context = format!("Cannot issuer {} assets: {}", issuer.as_ref(), err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
+    }
+
     //
     // DATA ENTRIES
     //
