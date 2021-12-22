@@ -296,7 +296,7 @@ async fn asset_verification_status_controller(
         maybe_asset_info,
         has_image,
         DEFAULT_INCLUDE_METADATA,
-        DEFAULT_FORMAT,
+        &DEFAULT_FORMAT,
     ))
 }
 
@@ -318,7 +318,7 @@ async fn asset_set_ticker_controller(
         maybe_asset_info,
         has_image,
         DEFAULT_INCLUDE_METADATA,
-        DEFAULT_FORMAT,
+        &DEFAULT_FORMAT,
     ))
 }
 
@@ -339,7 +339,7 @@ async fn asset_delete_ticker_controller(
         maybe_asset_info,
         has_image,
         DEFAULT_INCLUDE_METADATA,
-        DEFAULT_FORMAT,
+        &DEFAULT_FORMAT,
     ))
 }
 
@@ -363,7 +363,7 @@ async fn asset_add_label_controller(
         maybe_asset_info,
         has_image,
         DEFAULT_INCLUDE_METADATA,
-        DEFAULT_FORMAT,
+        &DEFAULT_FORMAT,
     ))
 }
 
@@ -387,7 +387,7 @@ async fn asset_delete_label_controller(
         maybe_asset_info,
         has_image,
         DEFAULT_INCLUDE_METADATA,
-        DEFAULT_FORMAT,
+        &DEFAULT_FORMAT,
     ))
 }
 
