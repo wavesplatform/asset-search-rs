@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use serde_qs::Config;
 use std::sync::Arc;
 use warp::{Filter, Rejection};
 use wavesexchange_log::{debug, error, info};
@@ -7,9 +8,9 @@ use wavesexchange_warp::error::{
 };
 use wavesexchange_warp::log::access;
 
-use super::dtos::{MgetRequest, RequestOptions, SearchRequest};
-use super::models::{Asset, List};
-use super::{DEFAULT_LIMIT, ERROR_CODES_PREFIX};
+use super::dtos::{escape_querystring_field, MgetRequest, RequestOptions, SearchRequest};
+use super::models::{Asset, AssetInfo, List};
+use super::{DEFAULT_FORMAT, DEFAULT_INCLUDE_METADATA, DEFAULT_LIMIT, ERROR_CODES_PREFIX};
 use crate::error;
 use crate::services;
 use crate::services::assets::MgetOptions;
@@ -28,8 +29,6 @@ pub async fn start(
         let images_service = Arc::new(images_service);
         warp::any().map(move || images_service.clone())
     };
-
-    let create_serde_qs_config = || serde_qs::Config::new(5, false);
 
     let error_handler = handler(ERROR_CODES_PREFIX, |err| match err {
         error::Error::ValidationError(_error_message, error_details) => {
@@ -54,12 +53,16 @@ pub async fn start(
         .and(warp::get())
         .and(with_assets_service.clone())
         .and(with_images_service.clone())
-        .and(serde_qs::warp::query::<SearchRequest>(
-            create_serde_qs_config(),
-        ))
-        .and(serde_qs::warp::query::<RequestOptions>(
-            create_serde_qs_config(),
-        ))
+        .and(warp::query::raw().and_then(|qs: String| async move {
+            let cfg = create_serde_qs_config();
+            let qs = escape_querystring_field(&qs, "ids");
+            parse_querystring(&cfg, qs.as_str())
+        }))
+        .and(warp::query::raw().and_then(|qs: String| async move {
+            let cfg = create_serde_qs_config();
+            let qs = escape_querystring_field(&qs, "ids");
+            parse_querystring(&cfg, qs.as_str())
+        }))
         .and_then(assets_get_controller)
         .map(|res| warp::reply::json(&res));
 
@@ -98,7 +101,8 @@ async fn assets_get_controller(
     debug!("assets_get_controller"; "req" => format!("{:?}", req));
 
     let limit = req.limit.unwrap_or(DEFAULT_LIMIT);
-    let include_metadata = opts.include_metadata.unwrap_or(true);
+    let include_metadata = opts.include_metadata.unwrap_or(DEFAULT_INCLUDE_METADATA);
+    let format = opts.format.unwrap_or(DEFAULT_FORMAT);
 
     let asset_ids: Vec<String> = if let Some(ids) = req.ids {
         ids
@@ -131,13 +135,16 @@ async fn assets_get_controller(
     let assets = assets
         .into_iter()
         .zip(has_images)
-        .map(|(o, has_image)| Asset::from((o, has_image, include_metadata)))
+        .map(|(o, has_image)| Asset::new(o, has_image, include_metadata, &format))
         .collect_vec();
 
     let last_cursor = if has_next_page {
-        assets
-            .last()
-            .and_then(|a| a.data.as_ref().map(|ai| ai.id.clone()))
+        assets.last().and_then(|a| {
+            a.data.as_ref().map(|ai| match ai {
+                AssetInfo::Full(ai) => ai.id.clone(),
+                AssetInfo::Brief(ai) => ai.id.clone(),
+            })
+        })
     } else {
         None
     };
@@ -157,7 +164,9 @@ async fn assets_post_controller(
     opts: RequestOptions,
 ) -> Result<List<Asset>, Rejection> {
     debug!("assets_post_controller");
-    let include_metadata = opts.include_metadata.unwrap_or(true);
+
+    let include_metadata = opts.include_metadata.unwrap_or(DEFAULT_INCLUDE_METADATA);
+    let format = opts.format.unwrap_or(DEFAULT_FORMAT);
 
     let asset_ids = req.ids.iter().map(AsRef::as_ref).collect_vec();
 
@@ -174,10 +183,61 @@ async fn assets_post_controller(
         data: assets
             .into_iter()
             .zip(has_images)
-            .map(|(o, has_image)| Asset::from((o, has_image, include_metadata)))
+            .map(|(o, has_image)| Asset::new(o, has_image, include_metadata, &format))
             .collect_vec(),
         cursor: None,
     };
 
     Ok(list)
+}
+
+fn create_serde_qs_config() -> serde_qs::Config {
+    serde_qs::Config::new(5, false)
+}
+
+/// Parses querystring into T using serde_qs_config
+pub fn parse_querystring<'de, T>(serde_qs_config: &Config, qs: &'de str) -> Result<T, Rejection>
+where
+    T: serde::de::Deserialize<'de>,
+{
+    serde_qs_config
+        .deserialize_str::<T>(&qs)
+        .map_err(|e| warp::reject::custom(e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{
+        dtos::SearchRequest,
+        server::{create_serde_qs_config, parse_querystring},
+    };
+
+    #[test]
+    fn should_parse_querystring() {
+        let cfg = create_serde_qs_config();
+        let ids = vec!["1".to_owned(), "2".to_owned()];
+
+        let res = parse_querystring::<SearchRequest>(&cfg, r"ids=1&ids=2");
+
+        assert!(matches!(res, Ok(_)));
+        assert!(matches!(res.as_ref().unwrap().ids, Some(_)));
+        assert_eq!(res.unwrap().ids.unwrap(), ids);
+
+        let res = parse_querystring::<SearchRequest>(&cfg, r"ids[]=1&ids[]=2");
+
+        assert!(matches!(res, Ok(_)));
+        assert!(matches!(res.as_ref().unwrap().ids, Some(_)));
+        assert_eq!(res.unwrap().ids.unwrap(), ids);
+
+        let res = parse_querystring::<SearchRequest>(&cfg, r"ids%5B%5D=1&ids%5B%5D=2");
+
+        assert!(matches!(res, Ok(_)));
+        assert!(matches!(res.as_ref().unwrap().ids, Some(_)));
+        assert_eq!(res.unwrap().ids.unwrap(), ids);
+
+        let res = parse_querystring::<SearchRequest>(&cfg, r"search=asd");
+
+        assert!(matches!(res, Ok(_)));
+        assert!(matches!(res.unwrap().ids, None));
+    }
 }

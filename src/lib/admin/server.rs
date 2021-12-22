@@ -9,7 +9,7 @@ use wavesexchange_warp::error::{
 use wavesexchange_warp::log::access;
 
 use super::InvalidateCacheQueryParams;
-use crate::api::models::Asset;
+use crate::api::{dtos::ResponseFormat, models::Asset};
 use crate::cache::{self, AssetBlockchainData, AssetUserDefinedData, InvalidateCacheMode};
 use crate::error;
 use crate::models::{AssetLabel, VerificationStatus};
@@ -18,6 +18,8 @@ use crate::services::assets::GetOptions;
 
 const ERROR_CODES_PREFIX: u16 = 95;
 const API_KEY_HEADER_NAME: &str = "X-Api-Key";
+const DEFAULT_INCLUDE_METADATA: bool = true;
+const DEFAULT_FORMAT: ResponseFormat = ResponseFormat::Full;
 
 pub async fn start(
     port: u16,
@@ -290,7 +292,12 @@ async fn asset_verification_status_controller(
     let maybe_asset_info = assets_service.get(&asset_id, &GetOptions::default())?;
     let has_image = images_service.has_image(&asset_id).await?;
 
-    Ok(Asset::from((maybe_asset_info, has_image, true)))
+    Ok(Asset::new(
+        maybe_asset_info,
+        has_image,
+        DEFAULT_INCLUDE_METADATA,
+        DEFAULT_FORMAT,
+    ))
 }
 
 async fn asset_set_ticker_controller(
@@ -307,7 +314,12 @@ async fn asset_set_ticker_controller(
     let maybe_asset_info = assets_service.get(&asset_id, &GetOptions::default())?;
     let has_image = images_service.has_image(&asset_id).await?;
 
-    Ok(Asset::from((maybe_asset_info, has_image, true)))
+    Ok(Asset::new(
+        maybe_asset_info,
+        has_image,
+        DEFAULT_INCLUDE_METADATA,
+        DEFAULT_FORMAT,
+    ))
 }
 
 async fn asset_delete_ticker_controller(
@@ -323,7 +335,12 @@ async fn asset_delete_ticker_controller(
     let maybe_asset_info = assets_service.get(&asset_id, &GetOptions::default())?;
     let has_image = images_service.has_image(&asset_id).await?;
 
-    Ok(Asset::from((maybe_asset_info, has_image, true)))
+    Ok(Asset::new(
+        maybe_asset_info,
+        has_image,
+        DEFAULT_INCLUDE_METADATA,
+        DEFAULT_FORMAT,
+    ))
 }
 
 async fn asset_add_label_controller(
@@ -342,7 +359,12 @@ async fn asset_add_label_controller(
     let maybe_asset_info = assets_service.get(&asset_id, &GetOptions::default())?;
     let has_image = images_service.has_image(&asset_id).await?;
 
-    Ok(Asset::from((maybe_asset_info, has_image, true)))
+    Ok(Asset::new(
+        maybe_asset_info,
+        has_image,
+        DEFAULT_INCLUDE_METADATA,
+        DEFAULT_FORMAT,
+    ))
 }
 
 async fn asset_delete_label_controller(
@@ -361,7 +383,12 @@ async fn asset_delete_label_controller(
     let maybe_asset_info = assets_service.get(&asset_id, &GetOptions::default())?;
     let has_image = images_service.has_image(&asset_id).await?;
 
-    Ok(Asset::from((maybe_asset_info, has_image, true)))
+    Ok(Asset::new(
+        maybe_asset_info,
+        has_image,
+        DEFAULT_INCLUDE_METADATA,
+        DEFAULT_FORMAT,
+    ))
 }
 
 async fn cache_invalidate_controller<S, BDC, UDDC>(

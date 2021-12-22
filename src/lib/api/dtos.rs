@@ -77,6 +77,16 @@ where
     }
 }
 
+/// Escapes querystring field replacing sequence params with `<field>[]`
+///
+/// Backward compatibility door for clients,
+/// that requests service with params like `ids=1&ids=2`, `ids%5B%5D=1&ids%5B%5D=2` etc.
+pub fn escape_querystring_field<'de>(qs: &'de str, field: &str) -> String {
+    let to = format!("{}[]=", field);
+    qs.replace(&format!("{}=", field), &to)
+        .replace(&format!("{}%5B%5D=", field), &to)
+}
+
 #[cfg(test)]
 mod tests {
     use serde::Deserialize;

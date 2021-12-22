@@ -8,6 +8,8 @@ use crate::consumer::models::data_entry::DataEntryValue;
 use crate::models::{AssetLabel, DataEntryType, VerificationStatus};
 use crate::schema::{asset_wx_labels, assets, predefined_verifications};
 
+use super::dtos::ResponseFormat;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename = "list")]
 pub struct List<T> {
@@ -24,7 +26,13 @@ pub struct Asset {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct AssetInfo {
+pub enum AssetInfo {
+    Full(FullAssetInfo),
+    Brief(BriefAssetInfo),
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct FullAssetInfo {
     pub ticker: Option<String>,
     pub id: String,
     pub name: String,
@@ -41,7 +49,7 @@ pub struct AssetInfo {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct AssetInfoBrief {
+pub struct BriefAssetInfo {
     pub ticker: Option<String>,
     pub id: String,
     pub name: String,
@@ -162,26 +170,37 @@ impl diesel::query_builder::QueryFragment<diesel::pg::Pg> for VerificationStatus
 #[derive(Clone, Debug, Serialize)]
 pub struct OracleData(HashMap<String, DataEntryValue>);
 
-impl From<(Option<crate::models::AssetInfo>, bool, bool)> for Asset {
-    fn from(
-        (asset_info, has_image, include_metadata): (Option<crate::models::AssetInfo>, bool, bool),
+impl Asset {
+    pub fn new(
+        asset_info: Option<crate::models::AssetInfo>,
+        has_image: bool,
+        include_metadata: bool,
+        format: &ResponseFormat,
     ) -> Self {
         match asset_info {
             Some(asset_info) => {
-                let ai = AssetInfo {
-                    id: asset_info.asset.id,
-                    name: asset_info.asset.name,
-                    description: asset_info.asset.description,
-                    precision: asset_info.asset.precision,
-                    height: asset_info.asset.height,
-                    timestamp: asset_info.asset.timestamp,
-                    sender: asset_info.asset.issuer,
-                    quantity: asset_info.asset.quantity,
-                    reissuable: asset_info.asset.reissuable,
-                    has_script: asset_info.asset.smart,
-                    smart: asset_info.asset.smart,
-                    min_sponsored_fee: asset_info.asset.min_sponsored_fee,
-                    ticker: asset_info.asset.ticker,
+                let ai = match format {
+                    ResponseFormat::Full => AssetInfo::Full(FullAssetInfo {
+                        id: asset_info.asset.id,
+                        name: asset_info.asset.name,
+                        description: asset_info.asset.description,
+                        precision: asset_info.asset.precision,
+                        height: asset_info.asset.height,
+                        timestamp: asset_info.asset.timestamp,
+                        sender: asset_info.asset.issuer,
+                        quantity: asset_info.asset.quantity,
+                        reissuable: asset_info.asset.reissuable,
+                        has_script: asset_info.asset.smart,
+                        smart: asset_info.asset.smart,
+                        min_sponsored_fee: asset_info.asset.min_sponsored_fee,
+                        ticker: asset_info.asset.ticker,
+                    }),
+                    ResponseFormat::Brief => AssetInfo::Brief(BriefAssetInfo {
+                        id: asset_info.asset.id,
+                        name: asset_info.asset.name,
+                        smart: asset_info.asset.smart,
+                        ticker: asset_info.asset.ticker,
+                    }),
                 };
                 let metadata = AssetMetadata {
                     has_image: has_image,
