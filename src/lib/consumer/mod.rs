@@ -1663,11 +1663,14 @@ where
                 .issuer_assets(&issuer_address)
                 .map_err(|e| AppError::DbError(e.to_string()))?;
 
-            issuer_assets.iter().for_each(|asset| {
-                let asset_info_update =
-                    AssetInfoUpdate::SponsorRegularBalance(ib_update.new_regular_balance);
-                asset_info_updates.insert(asset.id.clone(), asset_info_update);
-            });
+            issuer_assets
+                .iter()
+                .filter(|asset| asset.min_sponsored_fee.is_some())
+                .for_each(|asset| {
+                    let asset_info_update =
+                        AssetInfoUpdate::SponsorRegularBalance(ib_update.new_regular_balance);
+                    asset_info_updates.insert(asset.id.clone(), asset_info_update);
+                });
 
             Ok(())
         })?;
@@ -1696,10 +1699,14 @@ where
                 .issuer_assets(&user_address)
                 .map_err(|e| AppError::DbError(e.to_string()))?;
 
-            issuer_assets.iter().for_each(|asset| {
-                let asset_info_update = AssetInfoUpdate::SponsorOutLeasing(ol_update.new_amount);
-                asset_info_updates.insert(asset.id.clone(), asset_info_update);
-            });
+            issuer_assets
+                .iter()
+                .filter(|asset| asset.min_sponsored_fee.is_some())
+                .for_each(|asset| {
+                    let asset_info_update =
+                        AssetInfoUpdate::SponsorOutLeasing(ol_update.new_amount);
+                    asset_info_updates.insert(asset.id.clone(), asset_info_update);
+                });
 
             Ok(())
         })?;
