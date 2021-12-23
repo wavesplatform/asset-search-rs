@@ -26,6 +26,7 @@ pub struct Asset {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(untagged)]
 pub enum AssetInfo {
     Full(FullAssetInfo),
     Brief(BriefAssetInfo),
