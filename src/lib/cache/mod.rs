@@ -136,6 +136,8 @@ impl From<(&AssetBlockchainData, &AssetUserDefinedData)> for AssetInfo {
 }
 
 /// Used by consumer for updating cached data
+/// 
+/// Generates new AssetBlockchainData via applying sequence of updates on current AssetBlockchainData value
 impl From<(&AssetBlockchainData, &Vec<AssetInfoUpdate>)> for AssetBlockchainData {
     fn from((current, updates): (&AssetBlockchainData, &Vec<AssetInfoUpdate>)) -> Self {
         updates
@@ -147,8 +149,7 @@ impl From<(&AssetBlockchainData, &Vec<AssetInfoUpdate>)> for AssetBlockchainData
                     cur.quantity = base_asset_info_update.quantity;
                     cur.reissuable = base_asset_info_update.reissuable;
                     cur.min_sponsored_fee = base_asset_info_update
-                        .min_sponsored_fee
-                        .or(cur.min_sponsored_fee);
+                        .min_sponsored_fee;
                     cur.smart = base_asset_info_update.smart;
                     cur
                 }
@@ -193,6 +194,9 @@ impl From<(&AssetBlockchainData, &Vec<AssetInfoUpdate>)> for AssetBlockchainData
 }
 
 /// Used by consumer for caching initial asset blockchain data
+/// 
+/// Generates new AssetBlockchainData from sequence of asset info updates
+/// Requires BaseAssetInfoUpdate to be the first one
 impl TryFrom<&Vec<AssetInfoUpdate>> for AssetBlockchainData {
     type Error = AppError;
 

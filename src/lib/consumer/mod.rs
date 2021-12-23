@@ -512,6 +512,10 @@ where
     assets_info_updates
         .iter()
         .try_for_each::<_, Result<(), AppError>>(|(asset_id, asset_info_updates)| {
+            debug!(
+                "invalidate cache for asset_id {}, asset_info_updates: {:?}",
+                asset_id, asset_info_updates
+            );
             match cached_blockhain_data
                 .get(asset_id.as_str())
                 .and_then(|o| o.as_ref())
