@@ -77,6 +77,7 @@ pub struct DataEntryUpdate {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(untagged)]
 pub enum DataEntryValue {
     BinVal(Vec<u8>),
     BoolVal(bool),

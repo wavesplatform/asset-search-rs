@@ -33,7 +33,7 @@ pub enum TickerFilter {
 }
 
 pub trait Repo {
-    fn find(&self, params: FindParams) -> Result<Vec<AssetId>, AppError>;
+    fn find(&self, params: FindParams, oracle_address: &str) -> Result<Vec<AssetId>, AppError>;
 
     fn get(&self, id: &str) -> Result<Option<Asset>, AppError>;
 

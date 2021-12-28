@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use crate::consumer::models::data_entry::DataEntryValue;
 use crate::models::{AssetLabel, DataEntryType, VerificationStatus};
 use crate::schema::{asset_wx_labels, assets, predefined_verifications};
+use crate::waves::parse_waves_association_key;
 
 use super::dtos::ResponseFormat;
 
@@ -215,28 +216,34 @@ impl Asset {
                                 oracle_data
                                     .into_iter()
                                     .fold(HashMap::new(), |mut acc, cur| {
+                                        let waves_association_key =
+                                            parse_waves_association_key(&cur.key);
+                                        let key = waves_association_key
+                                            .map(|wak| wak.key_without_asset_id)
+                                            .or(Some(cur.key))
+                                            .unwrap();
                                         match cur.data_type {
                                             DataEntryType::Bin => {
                                                 acc.insert(
-                                                    cur.key,
+                                                    key,
                                                     DataEntryValue::BinVal(cur.bin_val.unwrap()),
                                                 );
                                             }
                                             DataEntryType::Bool => {
                                                 acc.insert(
-                                                    cur.key,
+                                                    key,
                                                     DataEntryValue::BoolVal(cur.bool_val.unwrap()),
                                                 );
                                             }
                                             DataEntryType::Int => {
                                                 acc.insert(
-                                                    cur.key,
+                                                    key,
                                                     DataEntryValue::IntVal(cur.int_val.unwrap()),
                                                 );
                                             }
                                             DataEntryType::Str => {
                                                 acc.insert(
-                                                    cur.key,
+                                                    key,
                                                     DataEntryValue::StrVal(cur.str_val.unwrap()),
                                                 );
                                             }

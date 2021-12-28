@@ -1,10 +1,11 @@
 use serde::{Deserialize, Deserializer};
+use validator::Validate;
 
 use crate::models::{AssetLabel, VerificationStatus};
 
 use super::DEFAULT_LIMIT;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Validate)]
 pub struct SearchRequest {
     pub ids: Option<Vec<String>>,
     pub ticker: Option<String>,
@@ -14,6 +15,7 @@ pub struct SearchRequest {
     pub verified_status: Option<Vec<VerificationStatus>>,
     #[serde(rename = "label__in")]
     pub asset_label_in: Option<Vec<AssetLabel>>,
+    #[validate(range(max = 100))]
     pub limit: Option<u32>,
     pub after: Option<String>,
 }
@@ -38,9 +40,10 @@ pub struct MgetRequest {
     pub ids: Vec<String>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Validate)]
 pub struct RequestOptions {
     pub format: Option<ResponseFormat>,
+    #[serde(default, deserialize_with = "deserialize_optional_bool_from_string")]
     pub include_metadata: Option<bool>,
     #[serde(rename = "height__gte")]
     pub height_gte: Option<i32>,

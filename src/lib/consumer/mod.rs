@@ -6,8 +6,6 @@ use anyhow::{Error, Result};
 use bigdecimal::ToPrimitive;
 use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use itertools::Itertools;
-use lazy_static::lazy_static;
-use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::str;
@@ -39,12 +37,9 @@ use crate::error::Error as AppError;
 use crate::models::{
     AssetInfoUpdate, AssetLabel, AssetOracleDataEntry, BaseAssetInfoUpdate, DataEntryType,
 };
-use crate::waves::{get_asset_id, is_nft_asset, is_waves_asset_id, Address, WAVES_ID};
-
-lazy_static! {
-    static ref ASSET_ORACLE_DATA_ENTRY_KEY_REGEX: Regex =
-        Regex::new(r"^.+_<([a-zA-Z\d]+)>$").unwrap();
-}
+use crate::waves::{
+    get_asset_id, is_nft_asset, is_waves_asset_id, parse_waves_association_key, Address, WAVES_ID,
+};
 
 const ASSET_ORACLE_VERIFICATION_STATUS_VERIFIED: i64 = 2;
 
@@ -767,7 +762,7 @@ fn extract_data_entries_updates(
             data_entry_update.data_entry.as_ref().and_then(|de| {
                 let oracle_address = bs58::encode(&data_entry_update.address).into_string();
                 if waves_association_address == &oracle_address {
-                    let related_asset_id = parse_related_asset_id(&de.key);
+                    let parsed_key = parse_waves_association_key(&de.key);
                     let time_stamp = DateTime::from_utc(
                         NaiveDateTime::from_timestamp(
                             tx.data
@@ -793,7 +788,7 @@ fn extract_data_entries_updates(
                                 DataEntryValue::StrVal(escape_unicode_null(value))
                             }
                         }),
-                        related_asset_id,
+                        related_asset_id: parsed_key.map(|k| k.asset_id),
                     })
                 } else {
                     None
@@ -1509,12 +1504,6 @@ fn escape_unicode_null(s: &str) -> String {
     s.replace("\0", "\\0")
 }
 
-fn parse_related_asset_id(key: &str) -> Option<String> {
-    ASSET_ORACLE_DATA_ENTRY_KEY_REGEX
-        .captures(key)
-        .and_then(|cs| cs.get(1).map(|m| m.as_str().to_owned()))
-}
-
 impl From<&models::data_entry::DataEntryUpdate> for Option<AssetOracleDataEntry> {
     fn from(v: &models::data_entry::DataEntryUpdate) -> Self {
         v.related_asset_id.as_ref().and_then(|related_asset_id| {
@@ -1729,33 +1718,13 @@ mod tests {
 
     use super::{
         escape_unicode_null, extract_wa_verified_asset_label_update, is_asset_label_data_entry,
-        parse_related_asset_id, AssetLabelUpdate,
+        AssetLabelUpdate,
     };
 
     #[test]
     fn should_escape_unicode_null() {
         assert!("asd\0".contains("\0"));
         assert_eq!(escape_unicode_null("asd\0"), "asd\\0");
-    }
-
-    #[test]
-    fn should_parse_related_asset_id() {
-        let test_cases = vec![
-            (
-                "link_<9sQutD5HnRvjM1uui5cVC4w9xkMPAfYEV8ymug3Mon2Y>",
-                Some("9sQutD5HnRvjM1uui5cVC4w9xkMPAfYEV8ymug3Mon2Y".to_owned()),
-            ),
-            (
-                "description_<en>_<9sQutD5HnRvjM1uui5cVC4w9xkMPAfYEV8ymug3Mon2Y>",
-                Some("9sQutD5HnRvjM1uui5cVC4w9xkMPAfYEV8ymug3Mon2Y".to_owned()),
-            ),
-            ("test", None),
-        ];
-
-        test_cases.into_iter().for_each(|(key, expected)| {
-            let asset_id = parse_related_asset_id(key);
-            assert_eq!(asset_id, expected);
-        });
     }
 
     #[test]

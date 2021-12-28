@@ -359,7 +359,9 @@ impl Service for AssetsService {
                             acc
                         });
 
-                ids.iter().map(|id| assets.get(*id).cloned()).collect_vec()
+                ids.iter()
+                    .map(|id| assets.get(*id).cloned())
+                    .collect::<Vec<Option<_>>>()
             }
         };
 
@@ -369,7 +371,8 @@ impl Service for AssetsService {
                 Some(ai) => {
                     !is_nft_asset(ai.asset.quantity, ai.asset.precision, ai.asset.reissuable)
                 }
-                None => false,
+                // not found assets should be returned as nulls
+                None => true,
             })
             .collect::<Vec<_>>();
 
@@ -393,12 +396,14 @@ impl Service for AssetsService {
             limit: req.limit,
         };
 
-        self.repo.find(find_params).map(|asset_ids| {
-            asset_ids
-                .iter()
-                .map(|asset_id| asset_id.id.to_owned())
-                .collect()
-        })
+        self.repo
+            .find(find_params, &self.waves_association_address)
+            .map(|asset_ids| {
+                asset_ids
+                    .iter()
+                    .map(|asset_id| asset_id.id.to_owned())
+                    .collect()
+            })
     }
 
     fn user_defined_data(&self) -> Result<Vec<UserDefinedData>, AppError> {

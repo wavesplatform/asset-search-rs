@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use serde_qs::Config;
 use std::sync::Arc;
+use validator::Validate;
 use warp::{Filter, Rejection};
 use wavesexchange_log::{debug, error, info};
 use wavesexchange_warp::error::{
@@ -53,16 +54,24 @@ pub async fn start(
         .and(warp::get())
         .and(with_assets_service.clone())
         .and(with_images_service.clone())
-        .and(warp::query::raw().and_then(|qs: String| async move {
-            let cfg = create_serde_qs_config();
-            let qs = escape_querystring_field(&qs, "ids");
-            parse_querystring(&cfg, qs.as_str())
-        }))
-        .and(warp::query::raw().and_then(|qs: String| async move {
-            let cfg = create_serde_qs_config();
-            let qs = escape_querystring_field(&qs, "ids");
-            parse_querystring(&cfg, qs.as_str())
-        }))
+        .and(
+            warp::query::raw()
+                .and_then(|qs: String| async move {
+                    let cfg = create_serde_qs_config();
+                    let qs = escape_querystring_field(&qs, "ids");
+                    parse_querystring(&cfg, qs.as_str())
+                })
+                .and_then(|value| async move { validate(value).map_err(warp::reject::custom) }),
+        )
+        .and(
+            warp::query::raw()
+                .and_then(|qs: String| async move {
+                    let cfg = create_serde_qs_config();
+                    let qs = escape_querystring_field(&qs, "ids");
+                    parse_querystring(&cfg, qs.as_str())
+                })
+                .and_then(|value| async move { validate(value).map_err(warp::reject::custom) }),
+        )
         .and_then(assets_get_controller)
         .map(|res| warp::reply::json(&res));
 
@@ -203,6 +212,17 @@ where
     serde_qs_config
         .deserialize_str::<T>(&qs)
         .map_err(|e| warp::reject::custom(e))
+}
+
+fn validate<T>(value: T) -> Result<T, error::Error>
+where
+    T: Validate,
+{
+    value
+        .validate()
+        .map_err(|err| error::Error::ValidationError(err.to_string(), None))?;
+
+    Ok(value)
 }
 
 #[cfg(test)]
