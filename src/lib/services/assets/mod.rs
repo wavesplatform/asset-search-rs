@@ -197,10 +197,10 @@ impl Service for AssetsService {
                             acc
                         });
 
-                let assets_info = assets
-                    .into_iter()
-                    .map(|o| match o {
-                        Some(a) => {
+                let assets = assets.into_iter().try_fold::<_, _, Result<_, AppError>>(
+                    HashMap::new(),
+                    |mut acc, o| {
+                        if let Some(a) = o {
                             let asset_oracles_data =
                                 assets_oracles_data.get(&a.id).cloned().unwrap_or_default();
 
@@ -211,6 +211,7 @@ impl Service for AssetsService {
                                 )?;
 
                             // user defined data exists for all existing assets
+                            // at least as unknown verification_status
                             // therefore unwrap-safety is guaranteed
                             let asset_user_defined_data =
                                 assets_user_defined_data.get(&a.id).unwrap();
@@ -221,13 +222,15 @@ impl Service for AssetsService {
                             let ai =
                                 AssetInfo::from((&asset_blockchain_data, &asset_user_defined_data));
 
-                            Ok(Some(ai))
+                            acc.insert(a.id, ai);
                         }
-                        _ => Ok(None),
-                    })
-                    .collect::<Result<Vec<_>, AppError>>()?;
+                        Ok(acc)
+                    },
+                )?;
 
-                assets_info
+                ids.iter()
+                    .map(|id| assets.get(*id).cloned())
+                    .collect::<Vec<Option<_>>>()
             }
             None => {
                 let cached_assets = if opts.bypass_cache {
