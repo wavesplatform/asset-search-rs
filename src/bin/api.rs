@@ -4,7 +4,7 @@ use anyhow::Result;
 use app_lib::{
     api::{self},
     api_clients,
-    cache::{self, ASSET_KEY_PREFIX, ASSET_USER_DEFINED_DATA_KEY_PREFIX},
+    cache::{self, ASSET_KEY_PREFIX, ASSET_USER_DEFINED_DATA_KEY_PREFIX, KEY_SEPARATOR},
     config, db, redis,
 };
 use wavesexchange_log::info;
@@ -18,9 +18,13 @@ async fn main() -> Result<()> {
 
     let assets_service = {
         let pg_repo = app_lib::services::assets::repo::pg::PgRepo::new(pg_pool);
-        let assets_redis_cache = cache::redis::new(redis_pool.clone(), ASSET_KEY_PREFIX.to_owned());
-        let assets_user_defined_data_redis_cache =
-            cache::redis::new(redis_pool, ASSET_USER_DEFINED_DATA_KEY_PREFIX.to_owned());
+        let assets_redis_cache =
+            cache::redis::new(redis_pool.clone(), ASSET_KEY_PREFIX, KEY_SEPARATOR);
+        let assets_user_defined_data_redis_cache = cache::redis::new(
+            redis_pool,
+            ASSET_USER_DEFINED_DATA_KEY_PREFIX,
+            KEY_SEPARATOR,
+        );
         app_lib::services::assets::AssetsService::new(
             Arc::new(pg_repo),
             Box::new(assets_redis_cache),

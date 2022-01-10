@@ -12,6 +12,7 @@ use crate::models::{
     AssetSponsorBalance, VerificationStatus,
 };
 
+pub const KEY_SEPARATOR: &str = ":";
 pub const ASSET_KEY_PREFIX: &str = "asset";
 pub const ASSET_USER_DEFINED_DATA_KEY_PREFIX: &str = "asset_user_defined_data";
 

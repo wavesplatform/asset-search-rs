@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use app_lib::{
     admin, api_clients,
-    cache::{self, ASSET_KEY_PREFIX, ASSET_USER_DEFINED_DATA_KEY_PREFIX},
+    cache::{self, ASSET_KEY_PREFIX, ASSET_USER_DEFINED_DATA_KEY_PREFIX, KEY_SEPARATOR},
     config, db, redis,
 };
 use wavesexchange_log::info;
@@ -16,11 +16,12 @@ async fn main() -> Result<()> {
     let redis_pool = redis::pool(&admin_config.redis)?;
 
     let assets_blockchain_data_cache =
-        cache::redis::new(redis_pool.clone(), ASSET_KEY_PREFIX.to_owned());
+        cache::redis::new(redis_pool.clone(), ASSET_KEY_PREFIX, KEY_SEPARATOR);
 
     let assets_user_defined_data_redis_cache = cache::redis::new(
         redis_pool.clone(),
-        ASSET_USER_DEFINED_DATA_KEY_PREFIX.to_owned(),
+        ASSET_USER_DEFINED_DATA_KEY_PREFIX,
+        KEY_SEPARATOR,
     );
 
     let assets_service = {
@@ -36,8 +37,11 @@ async fn main() -> Result<()> {
 
     let admin_assets_service = {
         let pg_repo = app_lib::services::admin_assets::repo::pg::PgRepo::new(pg_pool);
-        let redis_cache =
-            cache::redis::new(redis_pool, ASSET_USER_DEFINED_DATA_KEY_PREFIX.to_owned());
+        let redis_cache = cache::redis::new(
+            redis_pool,
+            ASSET_USER_DEFINED_DATA_KEY_PREFIX,
+            KEY_SEPARATOR,
+        );
         app_lib::services::admin_assets::AdminAssetsService::new(
             Arc::new(pg_repo),
             Box::new(redis_cache),

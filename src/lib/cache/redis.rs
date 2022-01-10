@@ -6,17 +6,22 @@ use wavesexchange_log::{debug, trace};
 
 use super::{CacheKeyFn, SyncReadCache, SyncWriteCache};
 use crate::{error::Error as AppError, redis::RedisPool};
-
 #[derive(Clone)]
 pub struct RedisCache {
     redis_pool: RedisPool,
     key_prefix: String,
+    key_separator: String,
 }
 
-pub fn new(redis_pool: RedisPool, key_prefix: String) -> RedisCache {
+pub fn new(
+    redis_pool: RedisPool,
+    key_prefix: impl AsRef<str>,
+    key_separator: impl AsRef<str>,
+) -> RedisCache {
     RedisCache {
         redis_pool,
-        key_prefix,
+        key_prefix: key_prefix.as_ref().to_string(),
+        key_separator: key_separator.as_ref().to_string(),
     }
 }
 
@@ -96,13 +101,14 @@ where
 
     fn clear(&self) -> Result<(), AppError> {
         trace!(
-            "clear redis cache - keys prefixed with '{}'",
-            self.key_prefix
+            "clear redis cache - deleting keys prefixed with '{}{}'",
+            self.key_prefix,
+            self.key_separator,
         );
 
         let mut con = self.redis_pool.get()?;
 
-        con.keys(format!("{}*", self.key_prefix))
+        con.keys(format!("{}{}*", self.key_prefix, self.key_separator))
             .and_then(|keys_to_delete: Vec<String>| con.del(keys_to_delete))
             .map_err(|e| AppError::from(e))?;
 
@@ -112,6 +118,6 @@ where
 
 impl CacheKeyFn for RedisCache {
     fn key_fn(&self, source_key: &str) -> String {
-        format!("{}:{}", self.key_prefix, source_key)
+        format!("{}{}{}", self.key_prefix, self.key_separator, source_key)
     }
 }
