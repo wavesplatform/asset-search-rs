@@ -19,24 +19,6 @@ where
     timer!("cache invalidating");
 
     if *invalidate_cache_mode == InvalidateCacheMode::AllData
-        || *invalidate_cache_mode == InvalidateCacheMode::UserDefinedData
-    {
-        info!("starting assets user defined data cache invalidation");
-
-        let assets_user_defined_data = assets_service.user_defined_data()?;
-
-        assets_user_defined_data
-            .iter()
-            .try_for_each(|asset_user_defined_data| {
-                let asset_user_defined_data = AssetUserDefinedData::from(asset_user_defined_data);
-                assets_user_defined_data_redis_cache.set(
-                    &asset_user_defined_data.asset_id.clone(),
-                    asset_user_defined_data,
-                )
-            })?;
-    }
-
-    if *invalidate_cache_mode == InvalidateCacheMode::AllData
         || *invalidate_cache_mode == InvalidateCacheMode::BlockchainData
     {
         info!("starting assets blockchain data cache invalidation");
@@ -99,6 +81,24 @@ where
         }
 
         info!("cache succcessfully invalidated");
+    }
+
+    if *invalidate_cache_mode == InvalidateCacheMode::AllData
+        || *invalidate_cache_mode == InvalidateCacheMode::UserDefinedData
+    {
+        info!("starting assets user defined data cache invalidation");
+
+        let assets_user_defined_data = assets_service.user_defined_data()?;
+
+        assets_user_defined_data
+            .iter()
+            .try_for_each(|asset_user_defined_data| {
+                let asset_user_defined_data = AssetUserDefinedData::from(asset_user_defined_data);
+                assets_user_defined_data_redis_cache.set(
+                    &asset_user_defined_data.asset_id.clone(),
+                    asset_user_defined_data,
+                )
+            })?;
     }
 
     Ok(())
