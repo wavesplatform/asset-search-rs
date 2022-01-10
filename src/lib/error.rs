@@ -28,8 +28,8 @@ pub enum Error {
     ConsistencyError(String),
     #[error("UpstreamAPIBadResponse: {0}")]
     UpstreamAPIBadResponse(String),
-    #[error("CursorSerializationError: {0}")]
-    CursorSerializationError(#[from] serde_json::Error),
+    #[error("SerializationError: {0}")]
+    SerializationError(#[from] serde_json::Error),
     #[error("CursorDecodeError: {0}")]
     CursorDecodeError(#[from] base64::DecodeError),
     #[error("DataEntryValueParseError: {0}")]

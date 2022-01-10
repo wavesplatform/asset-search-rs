@@ -154,6 +154,7 @@ impl From<(&AssetBlockchainData, &Vec<AssetInfoUpdate>)> for AssetBlockchainData
                     cur.min_sponsored_fee = base_asset_info_update
                         .min_sponsored_fee;
                     cur.smart = base_asset_info_update.smart;
+                    cur.nft = base_asset_info_update.nft;
                     cur
                 }
                 AssetInfoUpdate::OraclesData(oracle_data) => {
@@ -248,6 +249,8 @@ pub trait SyncReadCache<T>: CacheKeyFn {
 
 pub trait SyncWriteCache<T>: SyncReadCache<T> {
     fn set(&self, key: &str, value: T) -> Result<(), AppError>;
+
+    fn clear(&self) -> Result<(), AppError>;
 }
 
 #[cfg(test)]

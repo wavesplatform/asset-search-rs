@@ -72,6 +72,11 @@ where
 
         {
             timer!("invalidating assets blockchain data cache");
+
+            debug!("clearing cache");
+            assets_blockchain_data_cache.clear()?;
+
+            debug!("setting new cache");
             all_assets_blockchain_data
                 .iter()
                 .try_for_each(|asset_info| {
@@ -90,6 +95,10 @@ where
 
         let assets_user_defined_data = assets_service.user_defined_data()?;
 
+        debug!("clearing cache");
+        assets_blockchain_data_cache.clear()?;
+
+        debug!("setting new cache");
         assets_user_defined_data
             .iter()
             .try_for_each(|asset_user_defined_data| {

@@ -93,6 +93,21 @@ where
 
         Ok(())
     }
+
+    fn clear(&self) -> Result<(), AppError> {
+        trace!(
+            "clear redis cache - keys prefixed with '{}'",
+            self.key_prefix
+        );
+
+        let mut con = self.redis_pool.get()?;
+
+        con.keys(format!("{}*", self.key_prefix))
+            .and_then(|keys_to_delete: Vec<String>| con.del(keys_to_delete))
+            .map_err(|e| AppError::from(e))?;
+
+        Ok(())
+    }
 }
 
 impl CacheKeyFn for RedisCache {
