@@ -124,6 +124,12 @@ impl Repo for PgRepo {
             ]
             .join(" UNION ");
 
+            let conditions = if conditions.len() > 0 {
+                format!("WHERE {}", conditions.iter().join(" AND "))
+            } else {
+                "".to_owned()
+            };
+
             format!(
                 "SELECT DISTINCT ON (a.id)
                     a.id,
@@ -132,12 +138,12 @@ impl Repo for PgRepo {
                     ({}) AS a
                 LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id
                 LEFT JOIN (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id, 'wa_verified'::asset_wx_label_value_type FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS awl ON awl.asset_id = a.id
-                WHERE {}
+                {}
                 ORDER BY a.id ASC, a.rank DESC",
                 search_query,
                 oracle_address,
                 MAX_UID,
-                conditions.iter().join(" AND ")
+                conditions
             )
         } else {
             // search by ticker only if there is not searching by text
@@ -152,6 +158,12 @@ impl Repo for PgRepo {
                 }
             }
 
+            let conditions = if conditions.len() > 0 {
+                format!("WHERE {}", conditions.iter().join(" AND "))
+            } else {
+                "".to_owned()
+            };
+
             format!(
                 "SELECT DISTINCT ON (a.id, a.block_uid)
                     a.id,
@@ -160,13 +172,13 @@ impl Repo for PgRepo {
                     (SELECT a.id, a.smart, (SELECT min(a1.block_uid) FROM assets a1 WHERE a1.id = a.id) AS block_uid FROM assets AS a WHERE a.superseded_by = {} AND a.nft = {}) AS a
                 LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id
                 LEFT JOIN (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id, 'wa_verified'::asset_wx_label_value_type FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS awl ON awl.asset_id = a.id
-                WHERE {}
+                {}
                 ORDER BY a.block_uid ASC",
                 MAX_UID,
                 false,
                 oracle_address,
                 MAX_UID,
-                conditions.iter().join(" AND ")
+                conditions
             )
         };
 
