@@ -10,7 +10,6 @@ use crate::{
     db::enums::DataEntryValueType,
     models::{AssetOracleDataEntry, AssetSponsorBalance, BaseAssetInfoUpdate, DataEntryType},
     schema::assets,
-    waves::is_nft_asset,
 };
 
 #[derive(Clone, Debug, Insertable)]
@@ -96,6 +95,8 @@ pub struct QueryableAsset {
     pub min_sponsored_fee: Option<i64>,
     #[sql_type = "Bool"]
     pub smart: bool,
+    #[sql_type = "Bool"]
+    pub nft: bool,
     #[sql_type = "Nullable<BigInt>"]
     pub sponsor_regular_balance: Option<i64>,
     #[sql_type = "Nullable<BigInt>"]
@@ -108,12 +109,12 @@ impl From<&QueryableAsset> for BaseAssetInfoUpdate {
             id: a.id.clone(),
             issuer: a.issuer.clone(),
             precision: a.precision,
-            nft: is_nft_asset(a.quantity, a.precision, a.reissuable),
             update_height: a.height,
             updated_at: a.timestamp.clone(),
             name: a.name.clone(),
             description: a.description.clone(),
             smart: a.smart,
+            nft: a.nft,
             quantity: a.quantity,
             reissuable: a.reissuable,
             min_sponsored_fee: a.min_sponsored_fee,
@@ -165,6 +166,7 @@ impl AssetBlockchainData {
             reissuable: asset.reissuable,
             min_sponsored_fee: asset.min_sponsored_fee,
             smart: asset.smart,
+            nft: asset.nft,
             oracles_data: oracles_data.to_owned(),
             sponsor_balance: if asset.min_sponsored_fee.is_some() {
                 asset

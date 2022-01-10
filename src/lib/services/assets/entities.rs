@@ -41,6 +41,8 @@ pub struct Asset {
     pub min_sponsored_fee: Option<i64>,
     #[sql_type = "Bool"]
     pub smart: bool,
+    #[sql_type = "Bool"]
+    pub nft: bool,
     #[sql_type = "Nullable<BigInt>"]
     pub sponsor_regular_balance: Option<i64>,
     #[sql_type = "Nullable<BigInt>"]
@@ -105,6 +107,7 @@ impl AssetBlockchainData {
             reissuable: asset.reissuable,
             min_sponsored_fee: asset.min_sponsored_fee,
             smart: asset.smart,
+            nft: asset.nft,
             sponsor_balance,
             oracles_data: oracles_data
                 .into_iter()

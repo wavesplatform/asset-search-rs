@@ -11,7 +11,6 @@ use crate::cache;
 use crate::cache::{AssetBlockchainData, AssetUserDefinedData};
 use crate::error::Error as AppError;
 use crate::models::AssetInfo;
-use crate::waves::is_nft_asset;
 
 use entities::UserDefinedData;
 use repo::{FindParams, TickerFilter};
@@ -371,9 +370,7 @@ impl Service for AssetsService {
         let nft_filtered_assets = assets
             .into_iter()
             .filter(|o| match o {
-                Some(ai) => {
-                    !is_nft_asset(ai.asset.quantity, ai.asset.precision, ai.asset.reissuable)
-                }
+                Some(ai) => !ai.asset.nft,
                 // not found assets should be returned as nulls
                 None => true,
             })

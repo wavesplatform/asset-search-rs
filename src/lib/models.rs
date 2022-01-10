@@ -29,6 +29,7 @@ pub struct Asset {
     pub reissuable: bool,
     pub min_sponsored_fee: Option<i64>,
     pub smart: bool,
+    pub nft: bool,
     pub ticker: Option<String>,
 }
 

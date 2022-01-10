@@ -36,6 +36,7 @@ pub struct AssetBlockchainData {
     pub reissuable: bool,
     pub min_sponsored_fee: Option<i64>,
     pub smart: bool,
+    pub nft: bool,
     pub oracles_data: HashMap<String, Vec<AssetOracleDataEntry>>,
     pub sponsor_balance: Option<AssetSponsorBalance>,
 }
@@ -54,6 +55,7 @@ impl From<&crate::models::AssetInfo> for AssetBlockchainData {
             reissuable: a.asset.reissuable,
             min_sponsored_fee: a.asset.min_sponsored_fee,
             smart: a.asset.smart,
+            nft: a.asset.nft,
             oracles_data: a.metadata.oracles_data.clone(),
             sponsor_balance: a.metadata.sponsor_balance.clone(),
         }
@@ -124,6 +126,7 @@ impl From<(&AssetBlockchainData, &AssetUserDefinedData)> for AssetInfo {
                 reissuable: blockchain_data.reissuable.clone(),
                 min_sponsored_fee: blockchain_data.min_sponsored_fee.clone(),
                 smart: blockchain_data.smart.clone(),
+                nft: blockchain_data.nft
             },
             metadata: AssetMetadata {
                 verification_status: user_defined_data.verification_status.clone(),
@@ -219,6 +222,7 @@ impl TryFrom<&Vec<AssetInfoUpdate>> for AssetBlockchainData {
             reissuable: base.reissuable,
             min_sponsored_fee: base.min_sponsored_fee,
             smart: base.smart,
+            nft: base.nft,
             oracles_data: HashMap::new(),
             sponsor_balance: None,
         };

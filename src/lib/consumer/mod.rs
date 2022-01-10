@@ -38,7 +38,7 @@ use crate::models::{
     AssetInfoUpdate, AssetLabel, AssetOracleDataEntry, BaseAssetInfoUpdate, DataEntryType,
 };
 use crate::waves::{
-    get_asset_id, is_nft_asset, is_waves_asset_id, parse_waves_association_key, Address, WAVES_ID,
+    get_asset_id, is_waves_asset_id, parse_waves_association_key, Address, WAVES_ID,
 };
 
 const ASSET_ORACLE_VERIFICATION_STATUS_VERIFIED: i64 = 2;
@@ -683,7 +683,7 @@ fn handle_base_asset_info_updates<R: repo::Repo>(
             issuer: update.issuer.clone(),
             precision: update.precision,
             smart: update.smart,
-            nft: is_nft_asset(update.quantity, update.precision, update.reissuable),
+            nft: update.nft,
             quantity: update.quantity,
             reissuable: update.reissuable,
             min_sponsored_fee: update.min_sponsored_fee,

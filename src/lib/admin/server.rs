@@ -1,3 +1,4 @@
+use futures::TryFutureExt;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -95,23 +96,24 @@ pub async fn start(
             .and(with_images_service.clone())
             .and(with_admin_assets_service.clone())
             .and_then(
-                |asset_id: String,
-                 verification_status: String,
-                 expected_api_key: String,
-                 provided_api_key: String,
-                 assets_service,
-                 images_service,
-                 admin_assets_service| async move {
-                    api_key_validation(&expected_api_key, &provided_api_key).and(
-                        asset_verification_status_controller(
-                            asset_id,
-                            verification_status,
-                            assets_service,
-                            images_service,
-                            admin_assets_service,
-                        )
-                        .await,
-                    )
+                move |asset_id: String,
+                      verification_status: String,
+                      expected_api_key: String,
+                      provided_api_key: String,
+                      assets_service,
+                      images_service,
+                      admin_assets_service| async move {
+                    api_key_validation(&expected_api_key, &provided_api_key)
+                        .and_then(|_| {
+                            asset_verification_status_controller(
+                                asset_id,
+                                verification_status,
+                                assets_service,
+                                images_service,
+                                admin_assets_service,
+                            )
+                        })
+                        .await
                 },
             )
             .map(|res| warp::reply::json(&res));
@@ -131,16 +133,17 @@ pub async fn start(
              assets_service,
              images_service,
              admin_assets_service| async move {
-                api_key_validation(&expected_api_key, &provided_api_key).and(
-                    asset_set_ticker_controller(
-                        asset_id,
-                        ticker,
-                        assets_service,
-                        images_service,
-                        admin_assets_service,
-                    )
-                    .await,
-                )
+                api_key_validation(&expected_api_key, &provided_api_key)
+                    .and_then(|_| {
+                        asset_set_ticker_controller(
+                            asset_id,
+                            ticker,
+                            assets_service,
+                            images_service,
+                            admin_assets_service,
+                        )
+                    })
+                    .await
             },
         )
         .map(|res| warp::reply::json(&res));
@@ -159,15 +162,16 @@ pub async fn start(
              assets_service,
              images_service,
              admin_assets_service| async move {
-                api_key_validation(&expected_api_key, &provided_api_key).and(
-                    asset_delete_ticker_controller(
-                        asset_id,
-                        assets_service,
-                        images_service,
-                        admin_assets_service,
-                    )
-                    .await,
-                )
+                api_key_validation(&expected_api_key, &provided_api_key)
+                    .and_then(|_| {
+                        asset_delete_ticker_controller(
+                            asset_id,
+                            assets_service,
+                            images_service,
+                            admin_assets_service,
+                        )
+                    })
+                    .await
             },
         )
         .map(|res| warp::reply::json(&res));
@@ -187,16 +191,17 @@ pub async fn start(
              assets_service,
              images_service,
              admin_assets_service| async move {
-                api_key_validation(&expected_api_key, &provided_api_key).and(
-                    asset_add_label_controller(
-                        asset_id,
-                        label,
-                        assets_service,
-                        images_service,
-                        admin_assets_service,
-                    )
-                    .await,
-                )
+                api_key_validation(&expected_api_key, &provided_api_key)
+                    .and_then(|_| {
+                        asset_add_label_controller(
+                            asset_id,
+                            label,
+                            assets_service,
+                            images_service,
+                            admin_assets_service,
+                        )
+                    })
+                    .await
             },
         )
         .map(|res| warp::reply::json(&res));
@@ -216,16 +221,17 @@ pub async fn start(
              assets_service,
              images_service,
              admin_assets_service| async move {
-                api_key_validation(&expected_api_key, &provided_api_key).and(
-                    asset_delete_label_controller(
-                        asset_id,
-                        label,
-                        assets_service,
-                        images_service,
-                        admin_assets_service,
-                    )
-                    .await,
-                )
+                api_key_validation(&expected_api_key, &provided_api_key)
+                    .and_then(|_| {
+                        asset_delete_label_controller(
+                            asset_id,
+                            label,
+                            assets_service,
+                            images_service,
+                            admin_assets_service,
+                        )
+                    })
+                    .await
             },
         )
         .map(|res| warp::reply::json(&res));
@@ -245,15 +251,16 @@ pub async fn start(
              assets_service,
              assets_blockchain_data_redis_cache,
              assets_user_defined_data_redis_cache| async move {
-                api_key_validation(&expected_api_key, &provided_api_key).and(
-                    cache_invalidate_controller(
-                        &query.mode,
-                        assets_service,
-                        assets_blockchain_data_redis_cache,
-                        assets_user_defined_data_redis_cache,
-                    )
-                    .await,
-                )
+                api_key_validation(&expected_api_key, &provided_api_key)
+                    .and_then(|_| {
+                        cache_invalidate_controller(
+                            &query.mode,
+                            assets_service,
+                            assets_blockchain_data_redis_cache,
+                            assets_user_defined_data_redis_cache,
+                        )
+                    })
+                    .await
             },
         )
         .map(|res| warp::reply::json(&res));
@@ -415,7 +422,7 @@ where
     Ok(())
 }
 
-fn api_key_validation(expected: &str, provided: &str) -> Result<(), Rejection> {
+async fn api_key_validation(expected: &str, provided: &str) -> Result<(), Rejection> {
     if expected == provided {
         Ok(())
     } else {

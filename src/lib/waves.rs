@@ -118,10 +118,6 @@ pub fn is_waves_asset_id<I: AsRef<[u8]>>(input: I) -> bool {
     get_asset_id(input) == WAVES_ID
 }
 
-pub fn is_nft_asset(quantity: i64, precision: i32, reissuable: bool) -> bool {
-    quantity == 1 && precision == 0 && !reissuable
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct WavesAssociationKey {
     source: String,
@@ -158,7 +154,7 @@ pub fn parse_waves_association_key(key: &str) -> Option<WavesAssociationKey> {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_nft_asset, parse_waves_association_key, WavesAssociationKey};
+    use super::{parse_waves_association_key, WavesAssociationKey};
 
     #[test]
     fn should_parse_waves_association_key() {
@@ -186,33 +182,6 @@ mod tests {
         test_cases.into_iter().for_each(|(key, expected)| {
             let actual = parse_waves_association_key(key);
             assert_eq!(actual, expected);
-        });
-    }
-
-    #[test]
-    fn should_recognize_nft_asset() {
-        // quantity, precision, reissuable, expected
-        let test_cases = [
-            (0, 0, false, false),
-            (0, 0, true, false),
-            (0, 1, false, false),
-            (0, 1, true, false),
-            (1, 0, false, true),
-            (1, 0, true, false),
-            (1, 1, false, false),
-            (1, 1, true, false),
-            (2, 0, false, false),
-            (2, 0, true, false),
-            (2, 1, false, false),
-            (2, 1, true, false),
-        ];
-
-        test_cases.iter().for_each(|tc| {
-            let quantity = tc.0;
-            let precision = tc.1;
-            let reissuable = tc.2;
-
-            assert_eq!(tc.3, is_nft_asset(quantity, precision, reissuable));
         });
     }
 }
