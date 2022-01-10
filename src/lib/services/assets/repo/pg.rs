@@ -337,7 +337,7 @@ fn generate_assets_user_defined_data_base_sql_query(oracle_address: &str) -> Str
         a.id as asset_id,
         pv.ticker,
         COALESCE(pv.verification_status, 'unknown'::verification_status_value_type) AS verification_status,
-        awl.labels AS labels
+        COALESCE(ARRAY[]::asset_wx_label_value_type[], awl.labels)  AS labels
         FROM assets a
         LEFT JOIN predefined_verifications pv ON a.id = pv.asset_id
         LEFT JOIN (SELECT asset_id, ARRAY_AGG(label) as labels FROM (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id AS asset_id, 'wa_verified'::asset_wx_label_value_type AS label FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS l GROUP BY asset_id) AS awl ON awl.asset_id = a.id
