@@ -1,6 +1,8 @@
 use anyhow::Result;
 use app_lib::{
-    cache::{self, ASSET_KEY_PREFIX, ASSET_USER_DEFINED_DATA_KEY_PREFIX, KEY_SEPARATOR},
+    cache::{
+        self, ASSET_BLOCKCHAIN_DATA_KEY_PREFIX, ASSET_USER_DEFINED_DATA_KEY_PREFIX, KEY_SEPARATOR,
+    },
     config, consumer, db, redis,
 };
 use std::sync::Arc;
@@ -23,8 +25,11 @@ async fn main() -> Result<()> {
 
     let redis_pool = redis::pool(&config.redis)?;
 
-    let blockchain_data_cache =
-        cache::redis::new(redis_pool.clone(), ASSET_KEY_PREFIX, KEY_SEPARATOR);
+    let blockchain_data_cache = cache::redis::new(
+        redis_pool.clone(),
+        ASSET_BLOCKCHAIN_DATA_KEY_PREFIX,
+        KEY_SEPARATOR,
+    );
     let user_defined_data_cache = cache::redis::new(
         redis_pool,
         ASSET_USER_DEFINED_DATA_KEY_PREFIX,

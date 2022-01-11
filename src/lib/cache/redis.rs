@@ -109,7 +109,13 @@ where
         let mut con = self.redis_pool.get()?;
 
         con.keys(format!("{}{}*", self.key_prefix, self.key_separator))
-            .and_then(|keys_to_delete: Vec<String>| con.del(keys_to_delete))
+            .and_then(|keys_to_delete: Vec<String>| {
+                if keys_to_delete.len() > 0 {
+                    con.del(keys_to_delete)
+                } else {
+                    Ok(())
+                }
+            })
             .map_err(|e| AppError::from(e))?;
 
         Ok(())

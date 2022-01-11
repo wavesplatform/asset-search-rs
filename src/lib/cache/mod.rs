@@ -13,7 +13,7 @@ use crate::models::{
 };
 
 pub const KEY_SEPARATOR: &str = ":";
-pub const ASSET_KEY_PREFIX: &str = "asset";
+pub const ASSET_BLOCKCHAIN_DATA_KEY_PREFIX: &str = "asset";
 pub const ASSET_USER_DEFINED_DATA_KEY_PREFIX: &str = "asset_user_defined_data";
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
@@ -127,7 +127,7 @@ impl From<(&AssetBlockchainData, &AssetUserDefinedData)> for AssetInfo {
                 reissuable: blockchain_data.reissuable.clone(),
                 min_sponsored_fee: blockchain_data.min_sponsored_fee.clone(),
                 smart: blockchain_data.smart.clone(),
-                nft: blockchain_data.nft
+                nft: blockchain_data.nft,
             },
             metadata: AssetMetadata {
                 verification_status: user_defined_data.verification_status.clone(),
@@ -140,7 +140,7 @@ impl From<(&AssetBlockchainData, &AssetUserDefinedData)> for AssetInfo {
 }
 
 /// Used by consumer for updating cached data
-/// 
+///
 /// Generates new AssetBlockchainData via applying sequence of updates on current AssetBlockchainData value
 impl From<(&AssetBlockchainData, &Vec<AssetInfoUpdate>)> for AssetBlockchainData {
     fn from((current, updates): (&AssetBlockchainData, &Vec<AssetInfoUpdate>)) -> Self {
@@ -199,7 +199,7 @@ impl From<(&AssetBlockchainData, &Vec<AssetInfoUpdate>)> for AssetBlockchainData
 }
 
 /// Used by consumer for caching initial asset blockchain data
-/// 
+///
 /// Generates new AssetBlockchainData from sequence of asset info updates
 /// Requires BaseAssetInfoUpdate to be the first one
 impl TryFrom<&Vec<AssetInfoUpdate>> for AssetBlockchainData {

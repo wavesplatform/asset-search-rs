@@ -3,7 +3,9 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use app_lib::{
-    cache::{self, ASSET_KEY_PREFIX, ASSET_USER_DEFINED_DATA_KEY_PREFIX, KEY_SEPARATOR},
+    cache::{
+        self, ASSET_BLOCKCHAIN_DATA_KEY_PREFIX, ASSET_USER_DEFINED_DATA_KEY_PREFIX, KEY_SEPARATOR,
+    },
     config, db, redis,
 };
 use wavesexchange_log::info;
@@ -20,8 +22,11 @@ async fn main() -> Result<()> {
         Arc::new(r)
     };
 
-    let assets_blockchain_data_cache =
-        cache::redis::new(redis_pool.clone(), ASSET_KEY_PREFIX, KEY_SEPARATOR);
+    let assets_blockchain_data_cache = cache::redis::new(
+        redis_pool.clone(),
+        ASSET_BLOCKCHAIN_DATA_KEY_PREFIX,
+        KEY_SEPARATOR,
+    );
 
     let assets_user_defined_data_redis_cache = cache::redis::new(
         redis_pool.clone(),
