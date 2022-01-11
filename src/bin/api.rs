@@ -1,13 +1,13 @@
 use std::sync::Arc;
-
 use anyhow::Result;
+use wavesexchange_log::info;
+
 use app_lib::{
     api::{self},
     api_clients,
     cache::{self, ASSET_BLOCKCHAIN_DATA_KEY_PREFIX, ASSET_USER_DEFINED_DATA_KEY_PREFIX, KEY_SEPARATOR},
     config, db, redis,
 };
-use wavesexchange_log::info;
 
 #[tokio::main]
 async fn main() -> Result<()> {

@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use serde_qs::Config;
+use std::convert::Infallible;
 use std::sync::Arc;
 use validator::Validate;
 use warp::{Filter, Rejection};
@@ -54,8 +55,10 @@ pub async fn start(
         .and(warp::get())
         .and(with_assets_service.clone())
         .and(with_images_service.clone())
+        // parse SearchRequest
         .and(
             warp::query::raw()
+                .or_else(|_rej| futures::future::ok::<(String,), Infallible>(("".to_owned(),)))
                 .and_then(|qs: String| async move {
                     let cfg = create_serde_qs_config();
                     let qs = escape_querystring_field(&qs, "ids");
@@ -63,8 +66,10 @@ pub async fn start(
                 })
                 .and_then(|value| async move { validate(value).map_err(warp::reject::custom) }),
         )
+        // parse RequestOptions
         .and(
             warp::query::raw()
+                .or_else(|_rej| futures::future::ok::<(String,), Infallible>(("".to_owned(),)))
                 .and_then(|qs: String| async move {
                     let cfg = create_serde_qs_config();
                     let qs = escape_querystring_field(&qs, "ids");
