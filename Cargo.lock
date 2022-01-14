@@ -60,7 +60,7 @@ dependencies = [
  "validator",
  "warp",
  "waves-protobuf-schemas",
- "wavesexchange_log 0.5.0",
+ "wavesexchange_log 0.5.0 (git+https://github.com/waves-exchange/wavesexchange-rs?tag=wavesexchange_log/0.5.0)",
  "wavesexchange_warp",
 ]
 
@@ -2302,20 +2302,6 @@ dependencies = [
 
 [[package]]
 name = "wavesexchange_log"
-version = "0.4.0"
-source = "git+https://github.com/waves-exchange/wavesexchange-rs?tag=wavesexchange_warp/0.12.1#1d56ef0663f9d2ca5582b384d622211da7803fdb"
-dependencies = [
- "chrono",
- "once_cell",
- "slog",
- "slog-async",
- "slog-envlogger",
- "slog-json",
- "slog-term",
-]
-
-[[package]]
-name = "wavesexchange_log"
 version = "0.5.0"
 source = "git+https://github.com/waves-exchange/wavesexchange-rs?tag=wavesexchange_log/0.5.0#f23ce00338fa8ce320f9627e1dc099bcc5244ddc"
 dependencies = [
@@ -2329,9 +2315,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "wavesexchange_log"
+version = "0.5.0"
+source = "git+https://github.com/waves-exchange/wavesexchange-rs?tag=wavesexchange_warp/0.12.3#68989e51a327fdff3d2a5fb675ed161988569a58"
+dependencies = [
+ "chrono",
+ "once_cell",
+ "slog",
+ "slog-async",
+ "slog-envlogger",
+ "slog-json",
+ "slog-term",
+]
+
+[[package]]
 name = "wavesexchange_warp"
-version = "0.12.1"
-source = "git+https://github.com/waves-exchange/wavesexchange-rs?tag=wavesexchange_warp/0.12.1#1d56ef0663f9d2ca5582b384d622211da7803fdb"
+version = "0.12.3"
+source = "git+https://github.com/waves-exchange/wavesexchange-rs?tag=wavesexchange_warp/0.12.3#68989e51a327fdff3d2a5fb675ed161988569a58"
 dependencies = [
  "futures",
  "once_cell",
@@ -2339,7 +2339,7 @@ dependencies = [
  "serde_json",
  "serde_qs",
  "warp",
- "wavesexchange_log 0.4.0",
+ "wavesexchange_log 0.5.0 (git+https://github.com/waves-exchange/wavesexchange-rs?tag=wavesexchange_warp/0.12.3)",
 ]
 
 [[package]]
