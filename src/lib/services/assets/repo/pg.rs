@@ -6,6 +6,7 @@ use diesel::sql_types::{Array, BigInt, Integer, Text};
 use diesel::{debug_query, prelude::*, sql_query};
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use regex::Regex;
 use wavesexchange_log::error;
 
 use super::{Asset, AssetId, FindParams, OracleDataEntry, Repo, TickerFilter, UserDefinedData};
@@ -106,15 +107,28 @@ impl Repo for PgRepo {
             let min_block_uid_subquery =
                 "SELECT min(block_uid) AS block_uid FROM assets WHERE id = a.id";
 
-            let search_by_id_query = format!("SELECT a.id, a.smart, ({}) as block_uid, CASE WHEN pv.ticker IS NULL THEN 128 ELSE 256 END AS rank FROM assets AS a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND a.id ILIKE '{}'", min_block_uid_subquery, MAX_UID, false, search);
+            let search_escaped_for_like = escape_for_like(search);
+
+            let search_by_id_query = format!("SELECT a.id, a.smart, ({}) as block_uid, CASE WHEN pv.ticker IS NULL THEN 128 ELSE 256 END AS rank FROM assets AS a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND a.id ILIKE '{}'", min_block_uid_subquery, MAX_UID, false, search_escaped_for_like);
             // UNION
-            let search_by_meta_query = format!("SELECT id, false AS smart, block_uid, ts_rank(to_tsvector('simple', name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN ticker IS NULL THEN 64 ELSE 128 END AS rank FROM asset_metadatas WHERE name ILIKE '{}%'", search, search);
+            let search_by_meta_query = format!("SELECT id, false AS smart, block_uid, ts_rank(to_tsvector('simple', name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN ticker IS NULL THEN 64 ELSE 128 END AS rank FROM asset_metadatas WHERE name ILIKE '{}%'", search, search_escaped_for_like);
             // UNION
-            let search_by_ticker_query = format!("SELECT a.id, a.smart, ({}) as block_uid, 32 AS rank FROM assets AS a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND pv.ticker ILIKE '{}%'", min_block_uid_subquery, MAX_UID, false, search);
+            let search_by_ticker_query = format!("SELECT a.id, a.smart, ({}) as block_uid, 32 AS rank FROM assets AS a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND pv.ticker ILIKE '{}%'", min_block_uid_subquery, MAX_UID, false, search_escaped_for_like);
             // UNION
-            let search_by_tsquery_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN pv.ticker IS NULL THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND to_tsvector('simple', a.name) @@ to_tsquery('simple', '{}:*')", min_block_uid_subquery, search, MAX_UID, false, search);
+            let search_by_tsquery_query = {
+                let search_escaped_for_tsquery = escape_for_tsquery(search);
+                let tsquery_condition = if search_escaped_for_tsquery.len() > 0 {
+                    format!(
+                        "to_tsvector('simple', a.name) @@ to_tsquery('simple', '{}:*')",
+                        search_escaped_for_tsquery
+                    )
+                } else {
+                    "1=1".to_owned()
+                };
+                format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN pv.ticker IS NULL THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND {}", min_block_uid_subquery, search, MAX_UID, false, tsquery_condition)
+            };
             // UNION
-            let search_by_name_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN pv.ticker IS NULL THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND a.name ILIKE '{}%'", min_block_uid_subquery, search, MAX_UID, false, search);
+            let search_by_name_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN pv.ticker IS NULL THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND a.name ILIKE '{}%'", min_block_uid_subquery, search, MAX_UID, false, search_escaped_for_like);
 
             let search_query = vec![
                 search_by_id_query,
@@ -343,4 +357,30 @@ fn generate_assets_user_defined_data_base_sql_query(oracle_address: &str) -> Str
         LEFT JOIN predefined_verifications pv ON a.id = pv.asset_id
         LEFT JOIN (SELECT asset_id, ARRAY_AGG(label) as labels FROM (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id AS asset_id, 'wa_verified'::asset_wx_label_value_type AS label FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS l GROUP BY asset_id) AS awl ON awl.asset_id = a.id
     ", oracle_address, MAX_UID)
+}
+
+fn escape_for_tsquery(query: &str) -> String {
+    let p1 = Regex::new(r"[^\w\s]|_").unwrap();
+    let p2 = Regex::new(r"\s+").unwrap();
+    let query = p1.replace_all(query, "").to_string();
+    p2.replace_all(query.trim(), " & ").to_string()
+}
+
+fn escape_for_like(query: &str) -> String {
+    let p = Regex::new(r"%").unwrap();
+    p.replace_all(query, "\\%").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::escape_for_tsquery;
+
+    #[test]
+    fn should_escape_for_tsquery() {
+        let test_cases = vec![("asd", "asd"), ("asd+", "asd"), ("asd dsa", "asd & dsa")];
+
+        test_cases.into_iter().for_each(|(src, expected)| {
+            assert_eq!(escape_for_tsquery(src), expected);
+        });
+    }
 }
