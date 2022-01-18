@@ -62,6 +62,8 @@ pub async fn start(
                 .and_then(|qs: String| async move {
                     let cfg = create_serde_qs_config();
                     let qs = escape_querystring_field(&qs, "ids");
+                    let qs = escape_querystring_field(&qs, "label__in");
+                    let qs = escape_querystring_field(&qs, "verified_status");
                     parse_querystring(&cfg, qs.as_str())
                 })
                 .and_then(|value| async move { validate(value).map_err(warp::reject::custom) }),
@@ -73,6 +75,8 @@ pub async fn start(
                 .and_then(|qs: String| async move {
                     let cfg = create_serde_qs_config();
                     let qs = escape_querystring_field(&qs, "ids");
+                    let qs = escape_querystring_field(&qs, "label__in");
+                    let qs = escape_querystring_field(&qs, "verified_status");
                     parse_querystring(&cfg, qs.as_str())
                 })
                 .and_then(|value| async move { validate(value).map_err(warp::reject::custom) }),
