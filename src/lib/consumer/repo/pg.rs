@@ -1,7 +1,7 @@
 use anyhow::{Error, Result};
 use diesel::dsl::sql;
 use diesel::pg::PgConnection;
-use diesel::sql_types::{Array, BigInt, Text, VarChar};
+use diesel::sql_types::{Array, BigInt, Bool, Text, VarChar};
 use diesel::{prelude::*, sql_query};
 
 use super::super::models::{
@@ -350,9 +350,10 @@ impl Repo for PgRepoImpl {
             LEFT JOIN blocks_microblocks bm ON a.block_uid = bm.uid
             LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = $1
             LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = $1
-            WHERE a.superseded_by = $1 AND a.issuer = $2"
+            WHERE a.superseded_by = $1 AND a.nft = $2 AND a.issuer = $3"
         )
         .bind::<BigInt, _>(MAX_UID)
+        .bind::<Bool, _>(false)
         .bind::<Text, _>(issuer.as_ref());
 
         q.load(&self.conn).map_err(|err| {

@@ -1662,7 +1662,7 @@ where
 
             issuer_assets
                 .iter()
-                .filter(|asset| asset.min_sponsored_fee.is_some())
+                .filter(|asset| !asset.nft && asset.min_sponsored_fee.is_some())
                 .for_each(|asset| {
                     let asset_info_update =
                         AssetInfoUpdate::SponsorRegularBalance(ib_update.new_regular_balance);
@@ -1698,7 +1698,7 @@ where
 
             issuer_assets
                 .iter()
-                .filter(|asset| asset.min_sponsored_fee.is_some())
+                .filter(|asset| !asset.nft && asset.min_sponsored_fee.is_some())
                 .for_each(|asset| {
                     let asset_info_update =
                         AssetInfoUpdate::SponsorOutLeasing(ol_update.new_amount);
