@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use crate::consumer::models::data_entry::DataEntryValue;
 use crate::models::{AssetLabel, DataEntryType, VerificationStatus};
 use crate::schema::{asset_wx_labels, assets, predefined_verifications};
-use crate::waves::parse_waves_association_key;
+use crate::waves::{parse_waves_association_key, KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES};
 
 use super::dtos::ResponseFormat;
 
@@ -216,8 +216,10 @@ impl Asset {
                                 oracle_data
                                     .into_iter()
                                     .fold(HashMap::new(), |mut acc, cur| {
-                                        let waves_association_key =
-                                            parse_waves_association_key(&cur.key);
+                                        let waves_association_key = parse_waves_association_key(
+                                            &KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES,
+                                            &cur.key,
+                                        );
                                         let key = waves_association_key
                                             .map(|wak| wak.key_without_asset_id)
                                             .or(Some(cur.key))

@@ -38,7 +38,8 @@ use crate::models::{
     AssetInfoUpdate, AssetLabel, AssetOracleDataEntry, BaseAssetInfoUpdate, DataEntryType,
 };
 use crate::waves::{
-    get_asset_id, is_waves_asset_id, parse_waves_association_key, Address, WAVES_ID,
+    get_asset_id, is_waves_asset_id, parse_waves_association_key, Address,
+    KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES, WAVES_ID,
 };
 
 const ASSET_ORACLE_VERIFICATION_STATUS_VERIFIED: i64 = 2;
@@ -762,7 +763,10 @@ fn extract_data_entries_updates(
             data_entry_update.data_entry.as_ref().and_then(|de| {
                 let oracle_address = bs58::encode(&data_entry_update.address).into_string();
                 if waves_association_address == &oracle_address {
-                    let parsed_key = parse_waves_association_key(&de.key);
+                    let parsed_key = parse_waves_association_key(
+                        &KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES,
+                        &de.key,
+                    );
                     let time_stamp = DateTime::from_utc(
                         NaiveDateTime::from_timestamp(
                             tx.data

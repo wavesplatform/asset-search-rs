@@ -125,27 +125,44 @@ pub struct WavesAssociationKey {
     pub key_without_asset_id: String,
 }
 
-/// Parses Key written in Waves Assiciation format
+pub const KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES: &'static [&str] =
+    &["description", "link", "logo", "status", "ticker"];
+
+/// Parses data entry key written in Waves Assiciation format
+/// respectively to the allowed attributes vector
 ///
 /// This format described as `{attribute}_<{asset_id}>`
 ///
 /// Example: `description_<en>_<9sQutD5HnRvjM1uui5cVC4w9xkMPAfYEV8ymug3Mon2Y>` will be parsed into:
 /// - `attribute = description_<en>`
 /// - `asset_id = 9sQutD5HnRvjM1uui5cVC4w9xkMPAfYEV8ymug3Mon2Y`
-pub fn parse_waves_association_key(key: &str) -> Option<WavesAssociationKey> {
+pub fn parse_waves_association_key(
+    allowed_attributes: &[&str],
+    key: &str,
+) -> Option<WavesAssociationKey> {
     ASSET_ORACLE_DATA_ENTRY_KEY_REGEX
         .captures(key)
         .and_then(|cs| {
             if cs.len() >= 2 {
                 let key_without_asset_id = cs.get(1).map(|k| k.as_str());
-                let asset_id = cs.get(cs.len() - 1).map(|k| k.as_str());
-                key_without_asset_id
-                    .zip(asset_id)
-                    .map(|(key_without_asset_id, asset_id)| WavesAssociationKey {
-                        source: key.to_owned(),
-                        key_without_asset_id: key_without_asset_id.to_owned(),
-                        asset_id: asset_id.to_owned(),
-                    })
+                match allowed_attributes
+                    .iter()
+                    .find(|allowed_attribute| match key_without_asset_id {
+                        Some(key) => key.starts_with(*allowed_attribute),
+                        _ => false,
+                    }) {
+                    Some(_allowed_attribute) => {
+                        let asset_id = cs.get(cs.len() - 1).map(|k| k.as_str());
+                        key_without_asset_id.zip(asset_id).map(
+                            |(key_without_asset_id, asset_id)| WavesAssociationKey {
+                                source: key.to_owned(),
+                                key_without_asset_id: key_without_asset_id.to_owned(),
+                                asset_id: asset_id.to_owned(),
+                            },
+                        )
+                    }
+                    _ => None,
+                }
             } else {
                 None
             }
@@ -154,7 +171,9 @@ pub fn parse_waves_association_key(key: &str) -> Option<WavesAssociationKey> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_waves_association_key, WavesAssociationKey};
+    use super::{
+        parse_waves_association_key, WavesAssociationKey, KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES,
+    };
 
     #[test]
     fn should_parse_waves_association_key() {
@@ -176,11 +195,13 @@ mod tests {
                     asset_id: "9sQutD5HnRvjM1uui5cVC4w9xkMPAfYEV8ymug3Mon2Y".to_owned(),
                 }),
             ),
+            ("data_provider_description_<en>", None),
             ("test", None),
         ];
 
         test_cases.into_iter().for_each(|(key, expected)| {
-            let actual = parse_waves_association_key(key);
+            let actual =
+                parse_waves_association_key(&KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES, key);
             assert_eq!(actual, expected);
         });
     }
