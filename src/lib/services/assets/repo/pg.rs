@@ -1,12 +1,10 @@
 use std::convert::TryFrom;
 
 use diesel::dsl::sql;
-use diesel::pg::Pg;
 use diesel::sql_types::{Array, BigInt, Integer, Text};
-use diesel::{debug_query, prelude::*, sql_query};
+use diesel::{prelude::*, sql_query};
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use regex::Regex;
 use wavesexchange_log::error;
 
 use super::{Asset, AssetId, FindParams, OracleDataEntry, Repo, TickerFilter, UserDefinedData};
@@ -104,10 +102,11 @@ impl Repo for PgRepo {
         }
 
         let assets_cte_query = if let Some(search) = params.search.as_ref() {
+            let search = utils::pg_escape(search);
             let min_block_uid_subquery =
                 "SELECT min(block_uid) AS block_uid FROM assets WHERE id = a.id";
 
-            let search_escaped_for_like = escape_for_like(search);
+            let search_escaped_for_like = utils::escape_for_like(&search);
 
             let search_by_id_query = format!("SELECT a.id, a.smart, ({}) as block_uid, CASE WHEN pv.ticker IS NULL THEN 128 ELSE 256 END AS rank FROM assets AS a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND a.id ILIKE '{}'", min_block_uid_subquery, MAX_UID, false, search_escaped_for_like);
             // UNION
@@ -115,18 +114,18 @@ impl Repo for PgRepo {
             // UNION
             let search_by_ticker_query = format!("SELECT a.id, a.smart, ({}) as block_uid, 32 AS rank FROM assets AS a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND pv.ticker ILIKE '{}%'", min_block_uid_subquery, MAX_UID, false, search_escaped_for_like);
             // UNION
-            let search_by_tsquery_query = {
-                let search_escaped_for_tsquery = escape_for_tsquery(search);
-                let tsquery_condition = if search_escaped_for_tsquery.len() > 0 {
+            let tsquery_condition = {
+                let search_escaped_for_tsquery = utils::escape_for_tsquery(&search);
+                if search_escaped_for_tsquery.len() > 0 {
                     format!(
                         "to_tsvector('simple', a.name) @@ to_tsquery('simple', '{}:*')",
                         search_escaped_for_tsquery
                     )
                 } else {
                     "1=1".to_owned()
-                };
-                format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN pv.ticker IS NULL THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND {}", min_block_uid_subquery, search, MAX_UID, false, tsquery_condition)
+                }
             };
+            let search_by_tsquery_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN pv.ticker IS NULL THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND {}", min_block_uid_subquery, search, MAX_UID, false, tsquery_condition);
             // UNION
             let search_by_name_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN pv.ticker IS NULL THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND a.name ILIKE '{}%'", min_block_uid_subquery, search, MAX_UID, false, search_escaped_for_like);
 
@@ -165,6 +164,7 @@ impl Repo for PgRepo {
             if let Some(ticker) = params.ticker.as_ref() {
                 match ticker {
                     TickerFilter::One(ticker) => {
+                        let ticker = utils::pg_escape(ticker);
                         conditions.push(format!("pv.ticker = '{}'", ticker));
                     }
                     TickerFilter::Any => {
@@ -212,9 +212,6 @@ impl Repo for PgRepo {
         let q = sql_query(format!("{} ORDER BY a.rn LIMIT $1", query))
             .bind::<Integer, _>(params.limit as i32);
 
-        let dbg = debug_query::<Pg, _>(&q).to_string();
-        println!("DEBUG: {}", dbg);
-
         q.load(&self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
             AppError::from(e)
@@ -254,9 +251,6 @@ impl Repo for PgRepo {
             {} WHERE a.nft = false AND a.id = ANY($1) AND a.block_uid <= (SELECT uid FROM blocks_microblocks WHERE height = $2 LIMIT 1) ORDER BY a.id, a.uid DESC", ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY.as_str()))
             .bind::<Array<Text>, _>(ids)
             .bind::<Integer, _>(height);
-
-        let dbg = debug_query::<Pg, _>(&q).to_string();
-        println!("DEBUG: {}", dbg);
 
         q.load(&self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
@@ -321,9 +315,6 @@ impl Repo for PgRepo {
         .bind::<Array<Text>, _>(asset_ids)
         .bind::<BigInt, _>(MAX_UID);
 
-        let dbg = debug_query::<Pg, _>(&q).to_string();
-        println!("DEBUG: {}", dbg);
-
         q.load(&self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
             AppError::from(e)
@@ -359,21 +350,68 @@ fn generate_assets_user_defined_data_base_sql_query(oracle_address: &str) -> Str
     ", oracle_address, MAX_UID)
 }
 
-fn escape_for_tsquery(query: &str) -> String {
-    let p1 = Regex::new(r"[^\w\s]|_").unwrap();
-    let p2 = Regex::new(r"\s+").unwrap();
-    let query = p1.replace_all(query, "").to_string();
-    p2.replace_all(query.trim(), " & ").to_string()
-}
+mod utils {
+    use regex::Regex;
+    use std::borrow::Cow;
 
-fn escape_for_like(query: &str) -> String {
-    let p = Regex::new(r"%").unwrap();
-    p.replace_all(query, "\\%").to_string()
+    pub(super) fn escape_for_tsquery(query: &str) -> String {
+        let p1 = Regex::new(r"[^\w\s]|_").unwrap();
+        let p2 = Regex::new(r"\s+").unwrap();
+        let query = p1.replace_all(&query, "").to_string();
+        p2.replace_all(query.trim(), " & ").to_string()
+    }
+
+    pub(super) fn escape_for_like(query: &str) -> String {
+        let p = Regex::new(r"%").unwrap();
+        p.replace_all(&query, "\\%").to_string()
+    }
+
+    pub(super) fn pg_escape<'a>(text: &'a str) -> Cow<'a, str> {
+        let bytes = text.as_bytes();
+
+        let mut owned = None;
+
+        for pos in 0..bytes.len() {
+            let special = match bytes[pos] {
+                0x07 => Some(b'a'),
+                0x08 => Some(b'b'),
+                b'\t' => Some(b't'),
+                b'\n' => Some(b'n'),
+                0x0b => Some(b'v'),
+                0x0c => Some(b'f'),
+                b'\r' => Some(b'r'),
+                b' ' => Some(b' '),
+                b'\\' => Some(b'\\'),
+                b'\'' => Some(b'\''),
+                _ => None,
+            };
+
+            if let Some(s) = special {
+                if owned.is_none() {
+                    owned = Some(bytes[0..pos].to_owned());
+                }
+                if s.eq(&b'\'') {
+                    owned.as_mut().unwrap().push(b'\'');
+                } else {
+                    owned.as_mut().unwrap().push(b'\\');
+                }
+                owned.as_mut().unwrap().push(s);
+            } else if let Some(owned) = owned.as_mut() {
+                owned.push(bytes[pos]);
+            }
+        }
+
+        if let Some(owned) = owned {
+            unsafe { Cow::Owned(String::from_utf8_unchecked(owned)) }
+        } else {
+            unsafe { Cow::Borrowed(std::str::from_utf8_unchecked(bytes)) }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::escape_for_tsquery;
+    use super::utils::escape_for_tsquery;
 
     #[test]
     fn should_escape_for_tsquery() {
