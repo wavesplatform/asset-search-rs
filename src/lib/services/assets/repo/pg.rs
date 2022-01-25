@@ -1,8 +1,9 @@
 use std::convert::TryFrom;
 
 use diesel::dsl::sql;
+use diesel::pg::Pg;
 use diesel::sql_types::{Array, BigInt, Integer, Text};
-use diesel::{prelude::*, sql_query};
+use diesel::{debug_query, prelude::*, sql_query};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use wavesexchange_log::error;
@@ -64,10 +65,18 @@ impl Repo for PgRepo {
                 .map(|vs| VerificationStatusValueType::from(vs))
                 .collect_vec();
 
-            let verification_statuses_filter = format!(
-                "pv.verification_status = ANY(ARRAY[{}])",
-                verification_statuses.iter().join(",")
-            );
+            let verification_statuses_filter =
+                if verification_statuses.contains(&VerificationStatusValueType::Unknown) {
+                    format!(
+                    "(pv.verification_status IS NULL OR pv.verification_status = ANY(ARRAY[{}]))",
+                    verification_statuses.iter().join(",")
+                )
+                } else {
+                    format!(
+                        "pv.verification_status = ANY(ARRAY[{}])",
+                        verification_statuses.iter().join(",")
+                    )
+                };
             conditions.push(verification_statuses_filter);
         }
 
@@ -150,7 +159,7 @@ impl Repo for PgRepo {
                     ROW_NUMBER() OVER (ORDER BY a.rank DESC, a.block_uid ASC, a.id ASC) AS rn
                 FROM
                     ({}) AS a
-                LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id
+                LEFT JOIN (SELECT asset_id, ticker, COALESCE(verification_status, 'unknown') as verification_status FROM predefined_verifications) AS pv ON pv.asset_id = a.id
                 LEFT JOIN (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id, 'wa_verified'::asset_wx_label_value_type FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS awl ON awl.asset_id = a.id
                 {}
                 ORDER BY a.id ASC, a.rank DESC",
@@ -185,7 +194,7 @@ impl Repo for PgRepo {
                     ROW_NUMBER() OVER (ORDER BY a.block_uid ASC, a.id ASC) AS rn
                 FROM
                     (SELECT a.id, a.smart, (SELECT min(a1.block_uid) FROM assets a1 WHERE a1.id = a.id) AS block_uid FROM assets AS a WHERE a.superseded_by = {} AND a.nft = {}) AS a
-                LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id
+                LEFT JOIN (SELECT asset_id, ticker, COALESCE(verification_status, 'unknown') as verification_status FROM predefined_verifications) AS pv ON pv.asset_id = a.id
                 LEFT JOIN (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id, 'wa_verified'::asset_wx_label_value_type FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS awl ON awl.asset_id = a.id
                 {}
                 ORDER BY a.block_uid ASC",
@@ -211,6 +220,9 @@ impl Repo for PgRepo {
 
         let q = sql_query(format!("{} ORDER BY a.rn LIMIT $1", query))
             .bind::<Integer, _>(params.limit as i32);
+
+        let dbg = debug_query::<Pg, _>(&q).to_string();
+        println!("DEBUG: {}", dbg);
 
         q.load(&self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);

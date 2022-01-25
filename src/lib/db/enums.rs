@@ -36,7 +36,7 @@ pub enum DataEntryValueType {
     Str,
 }
 
-#[derive(DbEnum, Clone, Debug)]
+#[derive(DbEnum, Clone, Debug, PartialEq)]
 pub enum VerificationStatusValueType {
     Declined,
     Unknown,
