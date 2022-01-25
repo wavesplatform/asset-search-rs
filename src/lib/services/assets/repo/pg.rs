@@ -1,9 +1,8 @@
 use std::convert::TryFrom;
 
 use diesel::dsl::sql;
-use diesel::pg::Pg;
 use diesel::sql_types::{Array, BigInt, Integer, Text};
-use diesel::{debug_query, prelude::*, sql_query};
+use diesel::{prelude::*, sql_query};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use wavesexchange_log::error;
@@ -220,9 +219,6 @@ impl Repo for PgRepo {
 
         let q = sql_query(format!("{} ORDER BY a.rn LIMIT $1", query))
             .bind::<Integer, _>(params.limit as i32);
-
-        let dbg = debug_query::<Pg, _>(&q).to_string();
-        println!("DEBUG: {}", dbg);
 
         q.load(&self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
