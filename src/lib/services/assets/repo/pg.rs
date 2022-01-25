@@ -64,10 +64,18 @@ impl Repo for PgRepo {
                 .map(|vs| VerificationStatusValueType::from(vs))
                 .collect_vec();
 
-            let verification_statuses_filter = format!(
-                "pv.verification_status = ANY(ARRAY[{}])",
-                verification_statuses.iter().join(",")
-            );
+            let verification_statuses_filter =
+                if verification_statuses.contains(&VerificationStatusValueType::Unknown) {
+                    format!(
+                        "(pv.verification_status IS NULL OR pv.verification_status = ANY(ARRAY[{}]))",
+                        verification_statuses.iter().join(",")
+                    )
+                } else {
+                    format!(
+                        "pv.verification_status = ANY(ARRAY[{}])",
+                        verification_statuses.iter().join(",")
+                    )
+                };
             conditions.push(verification_statuses_filter);
         }
 
