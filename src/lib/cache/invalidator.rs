@@ -96,7 +96,7 @@ where
         let assets_user_defined_data = assets_service.user_defined_data()?;
 
         debug!("clearing cache");
-        assets_blockchain_data_cache.clear()?;
+        assets_user_defined_data_redis_cache.clear()?;
 
         debug!("setting new cache");
         assets_user_defined_data
