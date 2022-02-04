@@ -68,15 +68,13 @@ where
             }
         }
 
-        debug!("assets fetched"; "assets_count" => all_assets_blockchain_data.len());
-
         {
             timer!("invalidating assets blockchain data cache");
 
             debug!("clearing cache");
             assets_blockchain_data_cache.clear()?;
 
-            debug!("setting new cache");
+            debug!("setting new cache"; "assets count" => all_assets_blockchain_data.len());
             all_assets_blockchain_data
                 .iter()
                 .try_for_each(|asset_info| {
@@ -98,7 +96,7 @@ where
         debug!("clearing cache");
         assets_user_defined_data_redis_cache.clear()?;
 
-        debug!("setting new cache");
+        debug!("setting new cache"; "assets_user_defined_data count" => assets_user_defined_data.len());
         assets_user_defined_data
             .iter()
             .try_for_each(|asset_user_defined_data| {
