@@ -26,10 +26,10 @@ use self::models::data_entry::{
     DataEntryOverride, DataEntryUpdate, DataEntryValue, DeletedDataEntry, InsertableDataEntry,
 };
 use self::models::issuer_balance::{
-    self, DeletedIssuerBalance, InsertableIssuerBalance, IssuerBalanceOverride, IssuerBalanceUpdate,
+    DeletedIssuerBalance, InsertableIssuerBalance, IssuerBalanceOverride, IssuerBalanceUpdate,
 };
 use self::models::out_leasing::{
-    self, DeletedOutLeasing, InsertableOutLeasing, OutLeasingOverride, OutLeasingUpdate,
+    DeletedOutLeasing, InsertableOutLeasing, OutLeasingOverride, OutLeasingUpdate,
 };
 use crate::cache::{AssetBlockchainData, AssetUserDefinedData, SyncReadCache, SyncWriteCache};
 use crate::db::enums::DataEntryValueType;
@@ -376,8 +376,7 @@ where
             block_uids_with_appends
                 .iter()
                 .flat_map(|(block_uid, append)| {
-                    let balance_updates = extract_all_balance_updates(append);
-                    extract_issuer_balances_updates(&balance_updates, &issuers)
+                    extract_issuers_balance_updates(&append, &issuers)
                         .into_iter()
                         .map(|u| (block_uid, u))
                         .collect_vec()
@@ -401,8 +400,7 @@ where
             block_uids_with_appends
                 .iter()
                 .flat_map(|(block_uid, append)| {
-                    let updates = extract_all_leasing_updates(append);
-                    extract_out_leasing_updates(&updates)
+                    extract_out_leasing_updates(&append)
                         .into_iter()
                         .map(|u| (block_uid, u))
                         .collect_vec()
@@ -928,84 +926,58 @@ fn handle_data_entries_updates<R: repo::Repo>(
     repo.set_data_entries_next_update_uid(data_entries_next_uid + updates_count as i64)
 }
 
-fn extract_all_balance_updates(append: &BlockMicroblockAppend) -> Vec<issuer_balance::Update> {
+fn extract_issuers_balance_updates(
+    append: &BlockMicroblockAppend,
+    issuers: &HashSet<&str>,
+) -> Vec<IssuerBalanceUpdate> {
     // at first, balance updates placed at append.state_update
     // at second, balance updates placed at append.txs[i].state_update
     // so balance updates from txs[i].state_update should override balance updates from append.state_update
+
+    let mut issuer_balance_updates = HashMap::new();
 
     append
         .state_update
         .balances
         .iter()
-        .map(|balance_update| {
-            let updated_at = match append.time_stamp {
-                Some(time_stamp) => DateTime::from_utc(
-                    NaiveDateTime::from_timestamp(
-                        time_stamp / 1000,
-                        time_stamp as u32 % 1000 * 1000,
-                    ),
-                    Utc,
-                ),
-                _ => Utc::now(),
-            };
-
-            issuer_balance::Update {
-                updated_at,
-                update_height: append.height,
-                address: balance_update.address.clone(),
-                amount_after: balance_update.amount_after.clone(),
-                amount_before: balance_update.amount_before,
-            }
-        })
-        .clone()
-        .into_iter()
+        .map(|balance_update| (append.time_stamp, balance_update))
         .chain(append.txs.iter().flat_map(|tx| {
             tx.state_update
                 .balances
                 .iter()
-                .map(move |balance_update| {
-                    let updated_at = match &tx.data.transaction {
-                        Some(Transaction { timestamp, .. }) => DateTime::from_utc(
-                            NaiveDateTime::from_timestamp(
-                                timestamp / 1000,
-                                *timestamp as u32 % 1000 * 1000,
-                            ),
-                            Utc,
-                        ),
-                        _ => Utc::now(),
-                    };
-
-                    issuer_balance::Update {
-                        updated_at,
-                        update_height: append.height,
-                        address: balance_update.address.clone(),
-                        amount_after: balance_update.amount_after.clone(),
-                        amount_before: balance_update.amount_before,
-                    }
+                .map(move |balance_update| match tx.data.transaction {
+                    Some(Transaction { timestamp, .. }) => (Some(timestamp), balance_update),
+                    _ => (None, balance_update),
                 })
-                .clone()
         }))
-        .collect()
-}
-
-fn extract_issuer_balances_updates(
-    balance_updates: &Vec<issuer_balance::Update>,
-    issuers: &HashSet<&str>,
-) -> Vec<IssuerBalanceUpdate> {
-    let mut issuer_balance_updates = HashMap::new();
-
-    balance_updates
-        .iter()
-        .filter_map(|b| {
-            let address = bs58::encode(&b.address).into_string();
+        .filter_map(move |(time_stamp, balance_update)| {
+            let address = bs58::encode(&balance_update.address).into_string();
+            // handle issuers balances only
             if issuers.contains(&address.as_str()) {
-                b.amount_after.as_ref().and_then(|a| {
-                    if is_waves_asset_id(&a.asset_id) && b.amount_before != a.amount {
-                        Some((address, a.amount, b.updated_at, b.update_height))
-                    } else {
-                        None
-                    }
-                })
+                balance_update
+                    .amount_after
+                    .as_ref()
+                    .and_then(|amount_after| {
+                        // handle issuer waves balance changes only
+                        if is_waves_asset_id(&amount_after.asset_id)
+                            && balance_update.amount_before != amount_after.amount
+                        {
+                            let updated_at = match &time_stamp {
+                                Some(timestamp) => DateTime::from_utc(
+                                    NaiveDateTime::from_timestamp(
+                                        timestamp / 1000,
+                                        *timestamp as u32 % 1000 * 1000,
+                                    ),
+                                    Utc,
+                                ),
+                                _ => Utc::now(),
+                            };
+
+                            Some((address, amount_after.amount, updated_at, append.height))
+                        } else {
+                            None
+                        }
+                    })
             } else {
                 None
             }
@@ -1117,87 +1089,59 @@ fn handle_issuer_balances_updates<R: repo::Repo>(
     repo.set_issuer_balances_next_update_uid(issuer_balances_next_uid + updates_count as i64)
 }
 
-fn extract_all_leasing_updates(append: &BlockMicroblockAppend) -> Vec<out_leasing::Update> {
+fn extract_out_leasing_updates(append: &BlockMicroblockAppend) -> Vec<OutLeasingUpdate> {
     // at first, balance updates placed at append.state_update
     // at second, balance updates placed at append.txs[i].state_update
     // so balance updates from txs[i].state_update should override balance updates from append.state_update
+
+    let mut out_leasing_updates = HashMap::new();
 
     append
         .state_update
         .leasing_for_address
         .clone()
         .iter()
-        .map(|leasing_update| {
-            let updated_at = match append.time_stamp {
-                Some(time_stamp) => DateTime::from_utc(
-                    NaiveDateTime::from_timestamp(
-                        time_stamp / 1000,
-                        time_stamp as u32 % 1000 * 1000,
-                    ),
-                    Utc,
-                ),
-                _ => Utc::now(),
-            };
-
-            out_leasing::Update {
-                updated_at,
-                update_height: append.height,
-                address: leasing_update.address.clone(),
-                out_after: leasing_update.out_after,
-            }
-        })
-        .clone()
-        .into_iter()
-        .chain(append.txs.iter().flat_map(|tx| {
-            tx.state_update
-                .leasing_for_address
+        .chain(
+            append
+                .txs
                 .iter()
-                .map(|leasing_update| {
-                    let updated_at = match append.time_stamp {
-                        Some(time_stamp) => DateTime::from_utc(
-                            NaiveDateTime::from_timestamp(
-                                time_stamp / 1000,
-                                time_stamp as u32 % 1000 * 1000,
-                            ),
-                            Utc,
+                .flat_map(|tx| tx.state_update.leasing_for_address.iter()),
+        )
+        .for_each(|leasing_update| {
+            // handle out leasing changes only
+            if leasing_update.out_after != leasing_update.out_before {
+                let updated_at = match append.time_stamp {
+                    Some(time_stamp) => DateTime::from_utc(
+                        NaiveDateTime::from_timestamp(
+                            time_stamp / 1000,
+                            time_stamp as u32 % 1000 * 1000,
                         ),
-                        _ => Utc::now(),
-                    };
+                        Utc,
+                    ),
+                    _ => Utc::now(),
+                };
 
-                    out_leasing::Update {
-                        updated_at,
-                        update_height: append.height,
-                        address: leasing_update.address.clone(),
-                        out_after: leasing_update.out_after,
-                    }
-                })
-        }))
-        .collect::<Vec<_>>()
-}
+                let address = bs58::encode(&leasing_update.address).into_string();
 
-fn extract_out_leasing_updates(updates: &Vec<out_leasing::Update>) -> Vec<OutLeasingUpdate> {
-    let mut out_leasing_updates = HashMap::new();
-
-    updates.iter().filter(|lu| lu.out_after > 0).for_each(|lu| {
-        let address = bs58::encode(&lu.address).into_string();
-        if out_leasing_updates.contains_key(&address) {
-            out_leasing_updates
-                .entry(address.clone())
-                .and_modify(|u: &mut OutLeasingUpdate| {
-                    u.new_amount = lu.out_after;
-                });
-        } else {
-            out_leasing_updates.insert(
-                address.clone(),
-                OutLeasingUpdate {
-                    updated_at: lu.updated_at,
-                    update_height: lu.update_height as i32,
-                    address: address.clone(),
-                    new_amount: lu.out_after,
-                },
-            );
-        }
-    });
+                if out_leasing_updates.contains_key(&address) {
+                    out_leasing_updates.entry(address.clone()).and_modify(
+                        |u: &mut OutLeasingUpdate| {
+                            u.new_amount = leasing_update.out_after;
+                        },
+                    );
+                } else {
+                    out_leasing_updates.insert(
+                        address.clone(),
+                        OutLeasingUpdate {
+                            updated_at,
+                            update_height: append.height as i32,
+                            address: address.clone(),
+                            new_amount: leasing_update.out_after,
+                        },
+                    );
+                }
+            }
+        });
 
     out_leasing_updates.into_values().collect_vec()
 }
