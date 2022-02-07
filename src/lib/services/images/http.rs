@@ -20,7 +20,7 @@ impl HttpService {
 impl Service for HttpService {
     async fn has_image(&self, id: &str) -> Result<bool, AppError> {
         trace!("has image"; "id" => format!("{:?}", id));
-        match self.images_api_client.svg(id).await {
+        match cache::has_image(&self.images_api_client, id).await {
             Ok(_) => Ok(true),
             Err(ApiClientError::NotFoundError) => Ok(false),
             Err(err) => Err(AppError::UpstreamAPIBadResponse(err.to_string())),
@@ -35,5 +35,26 @@ impl Service for HttpService {
             .into_iter()
             .collect::<Result<_, AppError>>()?;
         Ok(has_images)
+    }
+}
+
+pub mod cache {
+    use bytes::Bytes;
+    use cached::proc_macro::cached;
+
+    use super::*;
+
+    #[cached(
+        time = 60,
+        key = "String",
+        convert = r#"{ format!("{}", asset_id ) }"#,
+        result = true,
+        sync_writes = true
+    )]
+    pub async fn has_image(
+        images_api_client: &Box<dyn images::Client + Send + Sync>,
+        asset_id: &str,
+    ) -> Result<Bytes, ApiClientError> {
+        images_api_client.svg(asset_id).await
     }
 }
