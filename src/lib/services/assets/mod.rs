@@ -367,13 +367,10 @@ impl Service for AssetsService {
             }
         };
 
+        // not found assets should be returned as nulls
         let nft_filtered_assets = assets
             .into_iter()
-            .filter(|o| match o {
-                Some(ai) => !ai.asset.nft,
-                // not found assets should be returned as nulls
-                None => true,
-            })
+            .map(|o| o.and_then(|ai| if ai.asset.nft { None } else { Some(ai) }))
             .collect::<Vec<_>>();
 
         Ok(nft_filtered_assets)
