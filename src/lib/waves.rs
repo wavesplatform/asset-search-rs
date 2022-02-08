@@ -126,7 +126,7 @@ pub struct WavesAssociationKey {
 }
 
 pub const KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES: &'static [&str] =
-    &["description", "link", "logo", "status", "ticker"];
+    &["description", "link", "logo", "status", "ticker", "email", "version"];
 
 /// Parses data entry key written in Waves Assiciation format
 /// respectively to the allowed attributes vector

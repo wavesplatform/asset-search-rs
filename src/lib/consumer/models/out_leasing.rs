@@ -1,16 +1,7 @@
+use chrono::{DateTime, Utc};
 use std::hash::{Hash, Hasher};
 
-use chrono::{DateTime, Utc};
-
 use crate::schema::out_leasings;
-
-#[derive(Clone, Debug)]
-pub struct Update {
-    pub updated_at: DateTime<Utc>,
-    pub update_height: u32,
-    pub address: Vec<u8>,
-    pub out_after: i64,
-}
 
 #[derive(Clone, Debug, Insertable)]
 #[table_name = "out_leasings"]

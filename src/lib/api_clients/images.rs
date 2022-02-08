@@ -16,7 +16,7 @@ impl Client for HttpClient {
     async fn svg(&self, asset_id: &str) -> Result<Bytes, Error> {
         let endpoint_url = format!("{}{}.svg", &self.root_url, asset_id);
 
-        trace!("Images service request:\n\tURL: {}", endpoint_url,);
+        trace!("Images service request: {}", endpoint_url,);
 
         let resp = self.client.get(&endpoint_url).send().await.map_err(|err| {
             Error::HttpRequestError(
