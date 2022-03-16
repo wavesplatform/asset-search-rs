@@ -1,10 +1,9 @@
-use std::convert::TryFrom;
-
 use diesel::dsl::sql;
 use diesel::sql_types::{Array, BigInt, Integer, Text};
 use diesel::{prelude::*, sql_query};
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use std::convert::TryFrom;
 use wavesexchange_log::error;
 
 use super::{Asset, AssetId, FindParams, OracleDataEntry, Repo, TickerFilter, UserDefinedData};
@@ -67,9 +66,9 @@ impl Repo for PgRepo {
             let verification_statuses_filter =
                 if verification_statuses.contains(&VerificationStatusValueType::Unknown) {
                     format!(
-                        "(pv.verification_status IS NULL OR pv.verification_status = ANY(ARRAY[{}]))",
-                        verification_statuses.iter().join(",")
-                    )
+                    "(pv.verification_status IS NULL OR pv.verification_status = ANY(ARRAY[{}]))",
+                    verification_statuses.iter().join(",")
+                )
                 } else {
                     format!(
                         "pv.verification_status = ANY(ARRAY[{}])",
@@ -107,6 +106,13 @@ impl Repo for PgRepo {
 
         if let Some(smart) = params.smart {
             conditions.push(format!("a.smart = {}", smart));
+        }
+
+        if let Some(issuer_in) = params.issuer_in {
+            conditions.push(format!(
+                "a.issuer = ANY(ARRAY[{}])",
+                issuer_in.iter().map(|addr| format!("'{}'", addr)).join(",")
+            ));
         }
 
         let assets_cte_query = if let Some(search) = params.search.as_ref() {
@@ -153,16 +159,18 @@ impl Repo for PgRepo {
             };
 
             format!(
-                "SELECT DISTINCT ON (a.id)
-                    a.id,
-                    ROW_NUMBER() OVER (ORDER BY a.rank DESC, a.block_uid ASC, a.id ASC) AS rn
+                "SELECT DISTINCT ON (search.id)
+                    search.id,
+                    ROW_NUMBER() OVER (ORDER BY search.rank DESC, search.block_uid ASC, search.id ASC) AS rn
                 FROM
-                    ({}) AS a
-                LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id
-                LEFT JOIN (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id, 'wa_verified'::asset_wx_label_value_type FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS awl ON awl.asset_id = a.id
+                    ({}) AS search
+                LEFT JOIN assets AS a ON a.id = search.id AND a.superseded_by = {}
+                LEFT JOIN predefined_verifications AS pv ON pv.asset_id = search.id
+                LEFT JOIN (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id, 'wa_verified'::asset_wx_label_value_type FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS awl ON awl.asset_id = search.id
                 {}
-                ORDER BY a.id ASC, a.rank DESC",
+                ORDER BY search.id ASC, search.rank DESC",
                 search_query,
+                MAX_UID,
                 oracle_address,
                 MAX_UID,
                 conditions
@@ -192,7 +200,7 @@ impl Repo for PgRepo {
                     a.id,
                     ROW_NUMBER() OVER (ORDER BY a.block_uid ASC, a.id ASC) AS rn
                 FROM
-                    (SELECT a.id, a.smart, (SELECT min(a1.block_uid) FROM assets a1 WHERE a1.id = a.id) AS block_uid FROM assets AS a WHERE a.superseded_by = {} AND a.nft = {}) AS a
+                    (SELECT a.id, a.smart, (SELECT min(a1.block_uid) FROM assets a1 WHERE a1.id = a.id) AS block_uid, a.issuer FROM assets AS a WHERE a.superseded_by = {} AND a.nft = {}) AS a
                 LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id
                 LEFT JOIN (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id, 'wa_verified'::asset_wx_label_value_type FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS awl ON awl.asset_id = a.id
                 {}

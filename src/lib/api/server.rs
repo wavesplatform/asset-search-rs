@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use serde_qs::Config;
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
 use validator::Validate;
@@ -33,11 +34,12 @@ pub async fn start(
     };
 
     let error_handler = handler(ERROR_CODES_PREFIX, |err| match err {
-        error::Error::ValidationError(_error_message, error_details) => {
-            validation::invalid_parameter(
-                ERROR_CODES_PREFIX,
-                error_details.to_owned().map(|details| details.into()),
-            )
+        error::Error::ValidationError(field, error_details) => {
+            let mut error_details = error_details.to_owned();
+            if let Some(details) = error_details.as_mut() {
+                details.insert("parameter".to_owned(), field.to_owned());
+            }
+            validation::invalid_parameter(ERROR_CODES_PREFIX, error_details)
         }
         error::Error::DbDieselError(error_message)
             if error_message.to_string() == "canceling statement due to statement timeout" =>
@@ -227,9 +229,30 @@ fn validate<T>(value: T) -> Result<T, error::Error>
 where
     T: Validate,
 {
-    value
-        .validate()
-        .map_err(|err| error::Error::ValidationError(err.to_string(), None))?;
+    value.validate().map_err(|errs| {
+        let errors = errs.errors();
+        if errors.len() > 0 {
+            // todo: handle not only the 1st error
+            let (field_name, error_details) = errors.iter().next().unwrap();
+            match error_details {
+                validator::ValidationErrorsKind::Field(error_details) => {
+                    // todo: handle not only the 1st error
+                    let details = error_details.iter().next().map(|e| {
+                        vec![("reason".to_owned(), e.code.to_string())]
+                            .into_iter()
+                            .collect::<HashMap<String, String>>()
+                    });
+                    error::Error::ValidationError(field_name.to_string(), details)
+                }
+                validator::ValidationErrorsKind::List(_)
+                | validator::ValidationErrorsKind::Struct(_) => {
+                    error::Error::ValidationError(field_name.to_string(), None)
+                }
+            }
+        } else {
+            error::Error::ValidationError(errs.to_string(), None)
+        }
+    })?;
 
     Ok(value)
 }

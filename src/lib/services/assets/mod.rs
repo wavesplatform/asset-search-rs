@@ -389,6 +389,7 @@ impl Service for AssetsService {
             smart: req.smart,
             verification_status_in: req.verification_status_in.clone(),
             asset_label_in: req.asset_label_in.clone(),
+            issuer_in: req.issuer_in.clone(),
             after: req.after.clone(),
             limit: req.limit,
         };
