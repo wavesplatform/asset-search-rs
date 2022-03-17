@@ -26,16 +26,7 @@ where
         const REQUEST_LIMIT: u32 = 1000;
 
         let mut all_assets_blockchain_data = vec![];
-        let mut req = SearchRequest {
-            ids: None,
-            ticker: None,
-            search: None,
-            smart: None,
-            verification_status_in: None,
-            asset_label_in: None,
-            limit: REQUEST_LIMIT,
-            after: None,
-        };
+        let mut req = SearchRequest::default().with_limit(REQUEST_LIMIT);
 
         loop {
             timer!("fetching assets from the assets service");

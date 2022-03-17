@@ -1,9 +1,9 @@
 use serde::{Deserialize, Deserializer};
-use validator::Validate;
-
-use crate::models::{AssetLabel, VerificationStatus};
+use validator::{Validate, ValidationError};
 
 use super::DEFAULT_LIMIT;
+use crate::models::{AssetLabel, VerificationStatus};
+use crate::waves::is_valid_base58;
 
 #[derive(Clone, Debug, Deserialize, Validate)]
 pub struct SearchRequest {
@@ -15,6 +15,9 @@ pub struct SearchRequest {
     pub verified_status: Option<Vec<VerificationStatus>>,
     #[serde(rename = "label__in")]
     pub asset_label_in: Option<Vec<AssetLabel>>,
+    #[serde(rename = "issuer__in")]
+    #[validate(custom = "validate_issuer_in")]
+    pub issuer_in: Option<Vec<String>>,
     #[validate(range(max = 100))]
     pub limit: Option<u32>,
     pub after: Option<String>,
@@ -30,9 +33,20 @@ impl From<SearchRequest> for crate::services::assets::SearchRequest {
             verification_status_in: sr.verified_status,
             asset_label_in: sr.asset_label_in,
             limit: sr.limit.unwrap_or(DEFAULT_LIMIT),
+            issuer_in: sr.issuer_in,
             after: sr.after,
         }
     }
+}
+
+fn validate_issuer_in(issuers: &Vec<String>) -> Result<(), ValidationError> {
+    issuers.iter().fold(Ok(()), |_, addr| {
+        if !is_valid_base58(addr) {
+            Err(ValidationError::new("Got invalid base58 string"))
+        } else {
+            Ok(())
+        }
+    })
 }
 
 #[derive(Clone, Debug, Deserialize)]

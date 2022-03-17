@@ -102,6 +102,10 @@ impl From<Address> for String {
     }
 }
 
+pub fn is_valid_base58(src: &str) -> bool {
+    bs58::decode(src).into_vec().is_ok()
+}
+
 pub const WAVES_ID: &str = "WAVES";
 pub const WAVES_NAME: &str = "Waves";
 pub const WAVES_PRECISION: i32 = 8;
@@ -125,8 +129,15 @@ pub struct WavesAssociationKey {
     pub key_without_asset_id: String,
 }
 
-pub const KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES: &'static [&str] =
-    &["description", "link", "logo", "status", "ticker", "email", "version"];
+pub const KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES: &'static [&str] = &[
+    "description",
+    "link",
+    "logo",
+    "status",
+    "ticker",
+    "email",
+    "version",
+];
 
 /// Parses data entry key written in Waves Assiciation format
 /// respectively to the allowed attributes vector
@@ -172,8 +183,22 @@ pub fn parse_waves_association_key(
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_waves_association_key, WavesAssociationKey, KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES,
+        is_valid_base58, parse_waves_association_key, WavesAssociationKey,
+        KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES,
     };
+
+    #[test]
+    fn should_validate_base58_string() {
+        let test_cases = vec![
+            ("3PC9BfRwJWWiw9AREE2B3eWzCks3CYtg4yo", true),
+            ("not-valid-string", false),
+        ];
+
+        test_cases.into_iter().for_each(|(key, expected)| {
+            let actual = is_valid_base58(&key);
+            assert_eq!(actual, expected);
+        });
+    }
 
     #[test]
     fn should_parse_waves_association_key() {
