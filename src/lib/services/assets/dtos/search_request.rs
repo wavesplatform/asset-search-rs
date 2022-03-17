@@ -2,7 +2,7 @@ use crate::models::AssetLabel;
 use crate::models::VerificationStatus;
 use serde::Deserialize;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct SearchRequest {
     pub ids: Option<Vec<String>>,
     pub ticker: Option<String>,
@@ -10,6 +10,7 @@ pub struct SearchRequest {
     pub smart: Option<bool>,
     pub verification_status_in: Option<Vec<VerificationStatus>>,
     pub asset_label_in: Option<Vec<AssetLabel>>,
+    pub issuer_in: Option<Vec<String>>,
     pub limit: u32,
     pub after: Option<String>,
 }
