@@ -118,7 +118,7 @@ async fn assets_get_controller(
     req: SearchRequest,
     opts: RequestOptions,
 ) -> Result<List<Asset>, Rejection> {
-    debug!("assets_get_controller"; "req" => format!("{:?}", req));
+    debug!("assets_get_controller"; "req" => format!("{:?}", req), "opts" => format!("{:?}", opts));
 
     let limit = req.limit.unwrap_or(DEFAULT_LIMIT);
     let include_metadata = opts.include_metadata.unwrap_or(DEFAULT_INCLUDE_METADATA);

@@ -5,6 +5,7 @@ pub mod repo;
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::Arc;
+use wavesexchange_log::timer;
 
 pub use self::dtos::SearchRequest;
 use crate::cache;
@@ -165,11 +166,16 @@ impl Service for AssetsService {
     fn mget(&self, ids: &[&str], opts: &MgetOptions) -> Result<Vec<Option<AssetInfo>>, AppError> {
         let assets = match opts.height {
             Some(height) => {
-                let assets = self.repo.mget_for_height(ids, height)?;
+                let assets = {
+                    timer!("assets_service::mget::mget_for_height");
+                    self.repo.mget_for_height(ids, height)?
+                };
 
-                let asset_oracles_data = self
-                    .repo
-                    .data_entries(&ids, &self.waves_association_address)?;
+                let asset_oracles_data = {
+                    timer!("assets_service::mget::data_entries");
+                    self.repo
+                        .data_entries(&ids, &self.waves_association_address)?
+                };
 
                 let assets_oracles_data =
                     asset_oracles_data
@@ -184,9 +190,11 @@ impl Service for AssetsService {
                             acc
                         });
 
-                let assets_user_defined_data = self
-                    .repo
-                    .mget_asset_user_defined_data(&ids, &self.waves_association_address)?;
+                let assets_user_defined_data = {
+                    timer!("assets_service::mget::mget_asset_user_defined_data");
+                    self.repo
+                        .mget_asset_user_defined_data(&ids, &self.waves_association_address)?
+                };
 
                 let assets_user_defined_data =
                     assets_user_defined_data
