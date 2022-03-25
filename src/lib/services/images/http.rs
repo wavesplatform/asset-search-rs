@@ -1,4 +1,4 @@
-use wavesexchange_log::trace;
+use wavesexchange_log::{timer, trace};
 
 use super::Service;
 use crate::api_clients::{images, Error as ApiClientError};
@@ -28,6 +28,7 @@ impl Service for HttpService {
     }
 
     async fn has_images(&self, ids: &[&str]) -> Result<Vec<bool>, AppError> {
+        timer!("has images");
         trace!("has images"; "ids" => format!("{:?}", ids));
         let fs = ids.iter().map(|id| self.has_image(id));
         let has_images = futures::future::join_all(fs)
@@ -48,8 +49,7 @@ pub mod cache {
         time = 60,
         key = "String",
         convert = r#"{ format!("{}", asset_id ) }"#,
-        result = true,
-        sync_writes = true
+        result = true
     )]
     pub async fn has_image(
         images_api_client: &Box<dyn images::Client + Send + Sync>,
