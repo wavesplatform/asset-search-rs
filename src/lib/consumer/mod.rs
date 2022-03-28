@@ -1505,10 +1505,7 @@ fn is_asset_label_data_entry(key: &str, asset_id: &str) -> bool {
     *key == format!("status_<{}>", asset_id)
 }
 
-/// Extracts AssetLabelUpdate for WaVerified
-///
-/// At this moment it should be WaVerified label only,
-/// but in the future it can be WaVerified | CommunityVerified labels depends on oracle address
+/// Extracts AssetLabelUpdate for CommunityVerified
 fn extract_wa_verified_asset_label_update(
     oracles_data: &HashMap<String, Vec<AssetOracleDataEntry>>,
 ) -> Option<AssetLabelUpdate> {
@@ -1519,10 +1516,10 @@ fn extract_wa_verified_asset_label_update(
                     Some(verification_status) => {
                         if verification_status == ASSET_ORACLE_VERIFICATION_STATUS_VERIFIED {
                             // there is update, set new label
-                            Some(AssetLabelUpdate::SetLabel(AssetLabel::WaVerified))
+                            Some(AssetLabelUpdate::SetLabel(AssetLabel::CommunityVerified))
                         } else {
                             // there is update, unset label
-                            Some(AssetLabelUpdate::DeleteLabel(AssetLabel::WaVerified))
+                            Some(AssetLabelUpdate::DeleteLabel(AssetLabel::CommunityVerified))
                         }
                     }
                     // there is no update
