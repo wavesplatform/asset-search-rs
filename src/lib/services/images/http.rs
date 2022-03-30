@@ -21,8 +21,7 @@ impl Service for HttpService {
     async fn has_image(&self, id: &str) -> Result<bool, AppError> {
         trace!("has image"; "id" => format!("{:?}", id));
         match cache::has_image(&self.images_api_client, id).await {
-            Ok(_) => Ok(true),
-            Err(ApiClientError::NotFoundError) => Ok(false),
+            Ok(res) => Ok(res),
             Err(err) => Err(AppError::UpstreamAPIBadResponse(err.to_string())),
         }
     }
@@ -40,7 +39,6 @@ impl Service for HttpService {
 }
 
 pub mod cache {
-    use bytes::Bytes;
     use cached::proc_macro::cached;
 
     use super::*;
@@ -54,7 +52,7 @@ pub mod cache {
     pub async fn has_image(
         images_api_client: &Box<dyn images::Client + Send + Sync>,
         asset_id: &str,
-    ) -> Result<Bytes, ApiClientError> {
-        images_api_client.svg(asset_id).await
+    ) -> Result<bool, ApiClientError> {
+        images_api_client.has_svg(asset_id).await
     }
 }
