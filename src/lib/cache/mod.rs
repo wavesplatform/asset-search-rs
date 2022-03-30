@@ -72,6 +72,15 @@ pub struct AssetUserDefinedData {
 }
 
 impl AssetUserDefinedData {
+    pub fn new(asset_id: impl AsRef<str>) -> Self {
+        Self {
+            asset_id: asset_id.as_ref().to_owned(),
+            ticker: None,
+            verification_status: VerificationStatus::default(),
+            labels: Vec::<AssetLabel>::new(),
+        }
+    }
+
     pub fn add_label(&self, label: &AssetLabel) -> Self {
         let mut labels = self.labels.iter().fold(HashSet::new(), |mut acc, cur| {
             acc.insert(cur.to_owned());
@@ -257,31 +266,36 @@ pub trait SyncWriteCache<T>: SyncReadCache<T> {
 #[cfg(test)]
 mod tests {
     use super::AssetUserDefinedData;
-    use crate::models::{AssetLabel, VerificationStatus};
+    use crate::models::AssetLabel;
 
     #[test]
     fn should_add_label() {
-        let udd = AssetUserDefinedData {
-            asset_id: "asset_id".to_owned(),
-            ticker: None,
-            verification_status: VerificationStatus::Unknown,
-            labels: vec![],
-        };
-
+        let udd = AssetUserDefinedData::new("asset_id");
         let udd_with_new_label = udd.add_label(&AssetLabel::WaVerified);
         assert_eq!(udd_with_new_label.labels, vec![AssetLabel::WaVerified]);
     }
 
     #[test]
-    fn should_delete_label() {
-        let udd = AssetUserDefinedData {
-            asset_id: "asset_id".to_owned(),
-            ticker: None,
-            verification_status: VerificationStatus::Unknown,
-            labels: vec![AssetLabel::WaVerified],
-        };
+    fn should_add_label_exactly_once() {
+        let udd = AssetUserDefinedData::new("asset_id");
+        let udd_with_new_label = udd.add_label(&AssetLabel::WaVerified);
+        let udd_with_new_label = udd_with_new_label.add_label(&AssetLabel::WaVerified);
+        assert_eq!(udd_with_new_label.labels, vec![AssetLabel::WaVerified]);
+    }
 
+    #[test]
+    fn should_delete_label() {
+        let udd = AssetUserDefinedData::new("asset_id");
         let udd_with_new_label = udd.delete_label(&AssetLabel::WaVerified);
+        assert_eq!(udd_with_new_label.labels, vec![]);
+    }
+
+    #[test]
+    fn should_delete_label_exactly_once() {
+        let udd = AssetUserDefinedData::new("asset_id");
+        let udd_with_new_label = udd.delete_label(&AssetLabel::WaVerified);
+        // should not fail while deleting non-existing label
+        udd_with_new_label.delete_label(&AssetLabel::WaVerified);
         assert_eq!(udd_with_new_label.labels, vec![]);
     }
 }
