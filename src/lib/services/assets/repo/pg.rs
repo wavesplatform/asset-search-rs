@@ -34,7 +34,7 @@ lazy_static! {
         CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ib.regular_balance END AS sponsor_regular_balance,
         CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ol.amount END          AS sponsor_out_leasing
         FROM assets AS a
-        LEFT JOIN blocks_microblocks bm ON a.block_uid = bm.uid
+        LEFT JOIN blocks_microblocks bm ON (SELECT min(block_uid) FROM assets WHERE id = a.id) = bm.uid
         LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = {}
         LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = {}
     ", MAX_UID, MAX_UID);
