@@ -150,7 +150,11 @@ async fn assets_get_controller(
 
     let assets = assets_service.mget(&asset_ids, &mget_options)?;
 
-    let has_images = images_service.has_images(&asset_ids).await?;
+    let has_images = if include_metadata {
+        images_service.has_images(&asset_ids).await?
+    } else {
+        vec![false; asset_ids.len()]
+    };
 
     let assets = assets
         .into_iter()
@@ -197,7 +201,11 @@ async fn assets_post_controller(
 
     let assets = assets_service.mget(&asset_ids, &mget_options)?;
 
-    let has_images = images_service.has_images(&asset_ids).await?;
+    let has_images = if include_metadata {
+        images_service.has_images(&asset_ids).await?
+    } else {
+        vec![false; asset_ids.len()]
+    };
 
     let list = List {
         data: assets
