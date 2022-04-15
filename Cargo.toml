@@ -15,7 +15,6 @@ bigdecimal = { version = "0.3", features = ["serde"] }
 blake2 = "0.9"
 bs58 = "0.4"
 bytes = "1.1"
-cached = "0.34.0"
 chrono = { version = "0.4", features = ["serde"] }
 diesel = { version = "1.4", default-features = false, features = ["chrono", "postgres", "r2d2"] }
 diesel-derive-enum = { version = "1.1.1", features = ["postgres"] }

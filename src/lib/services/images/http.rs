@@ -1,7 +1,7 @@
-use wavesexchange_log::{debug, trace};
+use wavesexchange_log::debug;
 
 use super::Service;
-use crate::api_clients::{images, Error as ApiClientError};
+use crate::api_clients::images;
 use crate::error::Error as AppError;
 
 pub struct HttpService {
@@ -19,8 +19,7 @@ impl HttpService {
 #[async_trait::async_trait]
 impl Service for HttpService {
     async fn has_image(&self, id: &str) -> Result<bool, AppError> {
-        trace!("has image"; "id" => format!("{:?}", id));
-        match cache::has_image(&self.images_api_client, id).await {
+        match self.images_api_client.has_svg(id).await {
             Ok(res) => Ok(res),
             Err(err) => Err(AppError::UpstreamAPIBadResponse(err.to_string())),
         }
@@ -40,24 +39,5 @@ impl Service for HttpService {
             ids.len()
         );
         Ok(has_images)
-    }
-}
-
-pub mod cache {
-    use cached::proc_macro::cached;
-
-    use super::*;
-
-    #[cached(
-        time = 60,
-        key = "String",
-        convert = r#"{ format!("{}", asset_id ) }"#,
-        result = true
-    )]
-    pub async fn has_image(
-        images_api_client: &Box<dyn images::Client + Send + Sync>,
-        asset_id: &str,
-    ) -> Result<bool, ApiClientError> {
-        images_api_client.has_svg(asset_id).await
     }
 }
