@@ -27,11 +27,11 @@ pub async fn start(
     assets_service: impl services::assets::Service + Send + Sync + 'static,
     images_service: impl services::images::Service + Send + Sync + 'static,
     admin_assets_service: impl services::admin_assets::Service + Send + Sync + 'static,
-    assets_blockchain_data_redis_cache: impl cache::SyncWriteCache<AssetBlockchainData>
+    assets_blockchain_data_redis_cache: impl cache::AsyncWriteCache<AssetBlockchainData>
         + Send
         + Sync
         + 'static,
-    assets_user_defined_data_redis_cache: impl cache::SyncWriteCache<AssetUserDefinedData>
+    assets_user_defined_data_redis_cache: impl cache::AsyncWriteCache<AssetUserDefinedData>
         + Send
         + Sync
         + 'static,
@@ -294,9 +294,13 @@ async fn asset_verification_status_controller(
     let verification_status = VerificationStatus::try_from(verification_status)?;
     debug!("asset_verification_status_controller"; "asset_id" => &asset_id, "verification_status" => format!("{}", verification_status));
 
-    admin_assets_service.update_verification_status(&asset_id, &verification_status)?;
+    admin_assets_service
+        .update_verification_status(&asset_id, &verification_status)
+        .await?;
 
-    let maybe_asset_info = assets_service.get(&asset_id, &GetOptions::default())?;
+    let maybe_asset_info = assets_service
+        .get(&asset_id, &GetOptions::default())
+        .await?;
     let has_image = images_service.has_image(&asset_id).await?;
 
     Ok(Asset::new(
@@ -316,9 +320,13 @@ async fn asset_set_ticker_controller(
 ) -> Result<Asset, Rejection> {
     debug!("asset_set_ticker_controller"; "asset_id" => &asset_id, "ticker" => &ticker);
 
-    admin_assets_service.update_ticker(&asset_id, Some(&ticker))?;
+    admin_assets_service
+        .update_ticker(&asset_id, Some(&ticker))
+        .await?;
 
-    let maybe_asset_info = assets_service.get(&asset_id, &GetOptions::default())?;
+    let maybe_asset_info = assets_service
+        .get(&asset_id, &GetOptions::default())
+        .await?;
     let has_image = images_service.has_image(&asset_id).await?;
 
     Ok(Asset::new(
@@ -337,9 +345,11 @@ async fn asset_delete_ticker_controller(
 ) -> Result<Asset, Rejection> {
     debug!("asset_delete_ticker_controller"; "asset_id" => &asset_id);
 
-    admin_assets_service.update_ticker(&asset_id, None)?;
+    admin_assets_service.update_ticker(&asset_id, None).await?;
 
-    let maybe_asset_info = assets_service.get(&asset_id, &GetOptions::default())?;
+    let maybe_asset_info = assets_service
+        .get(&asset_id, &GetOptions::default())
+        .await?;
     let has_image = images_service.has_image(&asset_id).await?;
 
     Ok(Asset::new(
@@ -361,9 +371,11 @@ async fn asset_add_label_controller(
 
     let label = AssetLabel::try_from(label.as_str())?;
 
-    admin_assets_service.add_label(&asset_id, &label)?;
+    admin_assets_service.add_label(&asset_id, &label).await?;
 
-    let maybe_asset_info = assets_service.get(&asset_id, &GetOptions::default())?;
+    let maybe_asset_info = assets_service
+        .get(&asset_id, &GetOptions::default())
+        .await?;
     let has_image = images_service.has_image(&asset_id).await?;
 
     Ok(Asset::new(
@@ -385,9 +397,11 @@ async fn asset_delete_label_controller(
 
     let label = AssetLabel::try_from(label.as_str())?;
 
-    admin_assets_service.delete_label(&asset_id, &label)?;
+    admin_assets_service.delete_label(&asset_id, &label).await?;
 
-    let maybe_asset_info = assets_service.get(&asset_id, &GetOptions::default())?;
+    let maybe_asset_info = assets_service
+        .get(&asset_id, &GetOptions::default())
+        .await?;
     let has_image = images_service.has_image(&asset_id).await?;
 
     Ok(Asset::new(
@@ -406,8 +420,8 @@ async fn cache_invalidate_controller<S, BDC, UDDC>(
 ) -> Result<(), Rejection>
 where
     S: services::assets::Service,
-    BDC: cache::SyncWriteCache<AssetBlockchainData>,
-    UDDC: cache::SyncWriteCache<AssetUserDefinedData>,
+    BDC: cache::AsyncWriteCache<AssetBlockchainData>,
+    UDDC: cache::AsyncWriteCache<AssetUserDefinedData>,
 {
     debug!("cache_invalidate_controller");
 
@@ -417,6 +431,7 @@ where
         assets_user_defined_data_redis_cache.clone(),
         invalidate_cache_mode,
     )
+    .await
     .map_err(|e| error::Error::InvalidateCacheError(e.to_string()))?;
 
     Ok(())

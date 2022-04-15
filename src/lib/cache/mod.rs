@@ -1,5 +1,6 @@
+pub mod async_redis;
 pub mod invalidator;
-pub mod redis;
+pub mod sync_redis;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -261,6 +262,20 @@ pub trait SyncWriteCache<T>: SyncReadCache<T> {
     fn set(&self, key: &str, value: T) -> Result<(), AppError>;
 
     fn clear(&self) -> Result<(), AppError>;
+}
+
+#[async_trait::async_trait]
+pub trait AsyncReadCache<T>: CacheKeyFn {
+    async fn get(&self, key: &str) -> Result<Option<T>, AppError>;
+
+    async fn mget(&self, keys: &[&str]) -> Result<Vec<Option<T>>, AppError>;
+}
+
+#[async_trait::async_trait]
+pub trait AsyncWriteCache<T>: AsyncReadCache<T> {
+    async fn set(&self, key: String, value: T) -> Result<(), AppError>;
+
+    async fn clear(&self) -> Result<(), AppError>;
 }
 
 #[cfg(test)]

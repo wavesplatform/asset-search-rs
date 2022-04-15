@@ -9,6 +9,8 @@ edition = "2018"
 anyhow = "1.0"
 async-trait = "0.1"
 base64 = "0.13"
+bb8 = "0.8"
+bb8-redis = "0.11"
 bigdecimal = { version = "0.3", features = ["serde"] }
 blake2 = "0.9"
 bs58 = "0.4"

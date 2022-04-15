@@ -1,4 +1,4 @@
-use wavesexchange_log::{timer, trace};
+use wavesexchange_log::{debug, trace};
 
 use super::Service;
 use crate::api_clients::{images, Error as ApiClientError};
@@ -27,13 +27,18 @@ impl Service for HttpService {
     }
 
     async fn has_images(&self, ids: &[&str]) -> Result<Vec<bool>, AppError> {
-        timer!("has images");
-        trace!("has images"; "ids" => format!("{:?}", ids));
-        let fs = ids.iter().map(|id| self.has_image(id));
-        let has_images = futures::future::join_all(fs)
+        let start_time = tokio::time::Instant::now();
+
+        let has_images = self
+            .images_api_client
+            .has_svgs(ids)
             .await
-            .into_iter()
-            .collect::<Result<_, AppError>>()?;
+            .map_err(|e| AppError::UpstreamAPIBadResponse(e.to_string()))?;
+        debug!(
+            "has images: completed in {}ms ({} images)",
+            start_time.elapsed().as_millis(),
+            ids.len()
+        );
         Ok(has_images)
     }
 }

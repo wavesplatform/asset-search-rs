@@ -148,7 +148,7 @@ async fn assets_get_controller(
         _ => MgetOptions::default(),
     };
 
-    let assets = assets_service.mget(&asset_ids, &mget_options)?;
+    let assets = assets_service.mget(&asset_ids, &mget_options).await?;
 
     let has_images = if include_metadata {
         images_service.has_images(&asset_ids).await?
@@ -199,7 +199,7 @@ async fn assets_post_controller(
         _ => MgetOptions::default(),
     };
 
-    let assets = assets_service.mget(&asset_ids, &mget_options)?;
+    let assets = assets_service.mget(&asset_ids, &mget_options).await?;
 
     let has_images = if include_metadata {
         images_service.has_images(&asset_ids).await?

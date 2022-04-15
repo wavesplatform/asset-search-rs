@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use wavesexchange_log::{debug, trace};
 
 use super::{CacheKeyFn, SyncReadCache, SyncWriteCache};
-use crate::{error::Error as AppError, redis::RedisPool};
+use crate::{error::Error as AppError, sync_redis::RedisPool};
 #[derive(Clone)]
 pub struct RedisCache {
     redis_pool: RedisPool,

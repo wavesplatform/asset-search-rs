@@ -216,6 +216,7 @@ impl Asset {
                                 oracle_data
                                     .into_iter()
                                     .fold(HashMap::new(), |mut acc, cur| {
+                                        // todo: improve performance (based on profiling)
                                         let waves_association_key = parse_waves_association_key(
                                             &KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES,
                                             &cur.key,

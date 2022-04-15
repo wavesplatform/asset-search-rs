@@ -48,6 +48,8 @@ pub enum Error {
     InvalidateCacheError(String),
     #[error("IncosistDataError: {0}")]
     IncosistDataError(String),
+    #[error("Bb8RunError: {0}")]
+    Bb8RunError(String),
 }
 
 impl Reject for Error {}

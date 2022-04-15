@@ -6,7 +6,7 @@ use app_lib::{
     cache::{
         self, ASSET_BLOCKCHAIN_DATA_KEY_PREFIX, ASSET_USER_DEFINED_DATA_KEY_PREFIX, KEY_SEPARATOR,
     },
-    config, db, redis,
+    config, db, async_redis,
 };
 use wavesexchange_log::info;
 
@@ -15,20 +15,20 @@ async fn main() -> Result<()> {
     let config = config::load_invalidate_cache_config().await?;
 
     let pg_pool = db::pool(&config.postgres)?;
-    let redis_pool = redis::pool(&config.redis)?;
+    let redis_pool = async_redis::pool(&config.redis).await?;
 
     let pg_repo = {
         let r = app_lib::services::assets::repo::pg::PgRepo::new(pg_pool.clone());
         Arc::new(r)
     };
 
-    let assets_blockchain_data_cache = cache::redis::new(
+    let assets_blockchain_data_cache = cache::async_redis::new(
         redis_pool.clone(),
         ASSET_BLOCKCHAIN_DATA_KEY_PREFIX,
         KEY_SEPARATOR,
     );
 
-    let assets_user_defined_data_redis_cache = cache::redis::new(
+    let assets_user_defined_data_redis_cache = cache::async_redis::new(
         redis_pool.clone(),
         ASSET_USER_DEFINED_DATA_KEY_PREFIX,
         KEY_SEPARATOR,
@@ -51,7 +51,8 @@ async fn main() -> Result<()> {
         Arc::new(assets_blockchain_data_cache),
         Arc::new(assets_user_defined_data_redis_cache),
         &config.app.invalidate_cache_mode,
-    )?;
+    )
+    .await?;
 
     Ok(())
 }

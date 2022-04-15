@@ -2,10 +2,10 @@ use anyhow::Result;
 use std::sync::Arc;
 use wavesexchange_log::{debug, info, timer};
 
-use super::{AssetBlockchainData, AssetUserDefinedData, InvalidateCacheMode, SyncWriteCache};
+use super::{AssetBlockchainData, AssetUserDefinedData, AsyncWriteCache, InvalidateCacheMode};
 use crate::services::assets::{MgetOptions, SearchRequest, Service};
 
-pub fn run<S, BDC, UDDC>(
+pub async fn run<S, BDC, UDDC>(
     assets_service: Arc<S>,
     assets_blockchain_data_cache: Arc<BDC>,
     assets_user_defined_data_redis_cache: Arc<UDDC>,
@@ -13,8 +13,8 @@ pub fn run<S, BDC, UDDC>(
 ) -> Result<()>
 where
     S: Service,
-    BDC: SyncWriteCache<AssetBlockchainData>,
-    UDDC: SyncWriteCache<AssetUserDefinedData>,
+    BDC: AsyncWriteCache<AssetBlockchainData>,
+    UDDC: AsyncWriteCache<AssetUserDefinedData>,
 {
     timer!("cache invalidating");
 
@@ -40,7 +40,8 @@ where
                 .mget(
                     &assets_blockchain_data_ids,
                     &MgetOptions::with_bypass_cache(true),
-                )?
+                )
+                .await?
                 .into_iter()
                 .filter_map(|o| o)
                 .collect::<Vec<_>>();
@@ -63,15 +64,17 @@ where
             timer!("invalidating assets blockchain data cache");
 
             debug!("clearing cache");
-            assets_blockchain_data_cache.clear()?;
+            assets_blockchain_data_cache.clear().await?;
 
             debug!("setting new cache"; "assets count" => all_assets_blockchain_data.len());
-            all_assets_blockchain_data
+            let fs = all_assets_blockchain_data
                 .iter()
-                .try_for_each(|asset_info| {
+                .map(|asset_info| {
                     let a = AssetBlockchainData::from(asset_info);
-                    assets_blockchain_data_cache.set(&a.id.clone(), a)
-                })?;
+                    assets_blockchain_data_cache.set(a.id.clone(), a)
+                })
+                .collect::<Vec<_>>();
+            futures::future::try_join_all(fs).await?;
         }
 
         info!("cache succcessfully invalidated");
@@ -85,18 +88,20 @@ where
         let assets_user_defined_data = assets_service.user_defined_data()?;
 
         debug!("clearing cache");
-        assets_user_defined_data_redis_cache.clear()?;
+        assets_user_defined_data_redis_cache.clear().await?;
 
         debug!("setting new cache"; "assets_user_defined_data count" => assets_user_defined_data.len());
-        assets_user_defined_data
+        let fs = assets_user_defined_data
             .iter()
-            .try_for_each(|asset_user_defined_data| {
+            .map(|asset_user_defined_data| {
                 let asset_user_defined_data = AssetUserDefinedData::from(asset_user_defined_data);
                 assets_user_defined_data_redis_cache.set(
-                    &asset_user_defined_data.asset_id.clone(),
-                    asset_user_defined_data,
+                    asset_user_defined_data.asset_id.clone(),
+                    asset_user_defined_data.clone(),
                 )
-            })?;
+            })
+            .collect::<Vec<_>>();
+        futures::future::try_join_all(fs).await?;
     }
 
     Ok(())

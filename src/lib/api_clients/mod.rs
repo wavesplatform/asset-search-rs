@@ -3,14 +3,14 @@ pub mod images;
 
 use anyhow::{anyhow, Result};
 use reqwest::Url;
-use std::{str::FromStr, sync::Arc, time::Duration};
+use std::{str::FromStr, time::Duration};
 
 pub use error::Error; // reexport Error
 
 #[derive(Clone)]
 pub struct HttpClient {
     pub root_url: Url,
-    pub client: Arc<reqwest::Client>,
+    pub client: reqwest::Client,
     user_agent: Option<String>,
 }
 
@@ -24,13 +24,11 @@ impl HttpClient {
         })?;
         Ok(Self {
             root_url: url,
-            client: Arc::new(
-                reqwest::Client::builder()
-                    .pool_max_idle_per_host(1)
-                    .tcp_keepalive(Duration::from_secs(90))
-                    .build()
-                    .unwrap(),
-            ),
+            client: reqwest::Client::builder()
+                .pool_max_idle_per_host(1)
+                .tcp_keepalive(Duration::from_secs(90))
+                .build()
+                .unwrap(),
             user_agent: None,
         })
     }
