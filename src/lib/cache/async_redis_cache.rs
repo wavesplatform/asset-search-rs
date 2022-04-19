@@ -7,7 +7,7 @@ use wavesexchange_log::trace;
 use super::{AsyncReadCache, AsyncWriteCache, CacheKeyFn};
 use crate::{async_redis::RedisPool, error::Error as AppError};
 #[derive(Clone)]
-pub struct RedisCache {
+pub struct AsyncRedisCache {
     redis_pool: RedisPool,
     key_prefix: String,
     key_separator: String,
@@ -17,8 +17,8 @@ pub fn new(
     redis_pool: RedisPool,
     key_prefix: impl AsRef<str>,
     key_separator: impl AsRef<str>,
-) -> RedisCache {
-    RedisCache {
+) -> AsyncRedisCache {
+    AsyncRedisCache {
         redis_pool,
         key_prefix: key_prefix.as_ref().to_string(),
         key_separator: key_separator.as_ref().to_string(),
@@ -26,7 +26,7 @@ pub fn new(
 }
 
 #[async_trait::async_trait]
-impl<T> AsyncReadCache<T> for RedisCache
+impl<T> AsyncReadCache<T> for AsyncRedisCache
 where
     T: DeserializeOwned + Clone + Debug,
 {
@@ -91,7 +91,7 @@ where
 }
 
 #[async_trait::async_trait]
-impl<T> AsyncWriteCache<T> for RedisCache
+impl<T> AsyncWriteCache<T> for AsyncRedisCache
 where
     T: Serialize + DeserializeOwned + Clone + Debug + Send + 'static,
 {
@@ -140,7 +140,7 @@ where
     }
 }
 
-impl CacheKeyFn for RedisCache {
+impl CacheKeyFn for AsyncRedisCache {
     fn key_fn(&self, source_key: &str) -> String {
         format!("{}{}{}", self.key_prefix, self.key_separator, source_key)
     }

@@ -20,19 +20,19 @@ async fn main() -> Result<()> {
 
     let assets_service = {
         let pg_repo = app_lib::services::assets::repo::pg::PgRepo::new(pg_pool);
-        let assets_redis_cache = cache::async_redis::new(
+        let assets_blockchain_data_redis_cache = cache::async_redis_cache::new(
             redis_pool.clone(),
             ASSET_BLOCKCHAIN_DATA_KEY_PREFIX,
             KEY_SEPARATOR,
         );
-        let assets_user_defined_data_redis_cache = cache::async_redis::new(
+        let assets_user_defined_data_redis_cache = cache::async_redis_cache::new(
             redis_pool,
             ASSET_USER_DEFINED_DATA_KEY_PREFIX,
             KEY_SEPARATOR,
         );
         app_lib::services::assets::AssetsService::new(
             Arc::new(pg_repo),
-            Box::new(assets_redis_cache),
+            Box::new(assets_blockchain_data_redis_cache),
             Box::new(assets_user_defined_data_redis_cache),
             &config.app.waves_association_address,
         )

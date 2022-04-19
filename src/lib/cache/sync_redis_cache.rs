@@ -6,8 +6,9 @@ use wavesexchange_log::{debug, trace};
 
 use super::{CacheKeyFn, SyncReadCache, SyncWriteCache};
 use crate::{error::Error as AppError, sync_redis::RedisPool};
+
 #[derive(Clone)]
-pub struct RedisCache {
+pub struct SyncRedisCache {
     redis_pool: RedisPool,
     key_prefix: String,
     key_separator: String,
@@ -17,15 +18,15 @@ pub fn new(
     redis_pool: RedisPool,
     key_prefix: impl AsRef<str>,
     key_separator: impl AsRef<str>,
-) -> RedisCache {
-    RedisCache {
+) -> SyncRedisCache {
+    SyncRedisCache {
         redis_pool,
         key_prefix: key_prefix.as_ref().to_string(),
         key_separator: key_separator.as_ref().to_string(),
     }
 }
 
-impl<T> SyncReadCache<T> for RedisCache
+impl<T> SyncReadCache<T> for SyncRedisCache
 where
     T: DeserializeOwned + Clone + Debug,
 {
@@ -82,7 +83,7 @@ where
     }
 }
 
-impl<T> SyncWriteCache<T> for RedisCache
+impl<T> SyncWriteCache<T> for SyncRedisCache
 where
     T: Serialize + DeserializeOwned + Clone + Debug,
 {
@@ -122,7 +123,7 @@ where
     }
 }
 
-impl CacheKeyFn for RedisCache {
+impl CacheKeyFn for SyncRedisCache {
     fn key_fn(&self, source_key: &str) -> String {
         format!("{}{}{}", self.key_prefix, self.key_separator, source_key)
     }

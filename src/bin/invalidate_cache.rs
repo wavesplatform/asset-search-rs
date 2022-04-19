@@ -3,10 +3,11 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use app_lib::{
+    async_redis,
     cache::{
         self, ASSET_BLOCKCHAIN_DATA_KEY_PREFIX, ASSET_USER_DEFINED_DATA_KEY_PREFIX, KEY_SEPARATOR,
     },
-    config, db, async_redis,
+    config, db,
 };
 use wavesexchange_log::info;
 
@@ -22,13 +23,13 @@ async fn main() -> Result<()> {
         Arc::new(r)
     };
 
-    let assets_blockchain_data_cache = cache::async_redis::new(
+    let assets_blockchain_data_redis_cache = cache::async_redis_cache::new(
         redis_pool.clone(),
         ASSET_BLOCKCHAIN_DATA_KEY_PREFIX,
         KEY_SEPARATOR,
     );
 
-    let assets_user_defined_data_redis_cache = cache::async_redis::new(
+    let assets_user_defined_data_redis_cache = cache::async_redis_cache::new(
         redis_pool.clone(),
         ASSET_USER_DEFINED_DATA_KEY_PREFIX,
         KEY_SEPARATOR,
@@ -41,14 +42,14 @@ async fn main() -> Result<()> {
 
     let assets_service = app_lib::services::assets::AssetsService::new(
         pg_repo.clone(),
-        Box::new(assets_blockchain_data_cache.clone()),
+        Box::new(assets_blockchain_data_redis_cache.clone()),
         Box::new(assets_user_defined_data_redis_cache.clone()),
         &config.app.waves_association_address,
     );
 
     cache::invalidator::run(
         Arc::new(assets_service),
-        Arc::new(assets_blockchain_data_cache),
+        Arc::new(assets_blockchain_data_redis_cache),
         Arc::new(assets_user_defined_data_redis_cache),
         &config.app.invalidate_cache_mode,
     )

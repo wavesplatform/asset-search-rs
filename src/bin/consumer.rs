@@ -25,12 +25,12 @@ async fn main() -> Result<()> {
 
     let redis_pool = sync_redis::pool(&config.redis)?;
 
-    let blockchain_data_cache = cache::sync_redis::new(
+    let blockchain_data_cache = cache::sync_redis_cache::new(
         redis_pool.clone(),
         ASSET_BLOCKCHAIN_DATA_KEY_PREFIX,
         KEY_SEPARATOR,
     );
-    let user_defined_data_cache = cache::sync_redis::new(
+    let user_defined_data_cache = cache::sync_redis_cache::new(
         redis_pool,
         ASSET_USER_DEFINED_DATA_KEY_PREFIX,
         KEY_SEPARATOR,

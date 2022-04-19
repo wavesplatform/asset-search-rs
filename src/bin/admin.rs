@@ -17,13 +17,13 @@ async fn main() -> Result<()> {
     let pg_pool = db::pool(&admin_config.postgres)?;
     let redis_pool = async_redis::pool(&admin_config.redis).await?;
 
-    let assets_blockchain_data_cache = cache::async_redis::new(
+    let assets_blockchain_data_cache = cache::async_redis_cache::new(
         redis_pool.clone(),
         ASSET_BLOCKCHAIN_DATA_KEY_PREFIX,
         KEY_SEPARATOR,
     );
 
-    let assets_user_defined_data_redis_cache = cache::async_redis::new(
+    let assets_user_defined_data_redis_cache = cache::async_redis_cache::new(
         redis_pool.clone(),
         ASSET_USER_DEFINED_DATA_KEY_PREFIX,
         KEY_SEPARATOR,
@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
 
     let admin_assets_service = {
         let pg_repo = app_lib::services::admin_assets::repo::pg::PgRepo::new(pg_pool);
-        let redis_cache = cache::async_redis::new(
+        let redis_cache = cache::async_redis_cache::new(
             redis_pool,
             ASSET_USER_DEFINED_DATA_KEY_PREFIX,
             KEY_SEPARATOR,
