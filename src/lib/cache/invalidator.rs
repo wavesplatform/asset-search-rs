@@ -1,9 +1,12 @@
 use anyhow::Result;
+use futures::{stream, StreamExt};
 use std::sync::Arc;
 use wavesexchange_log::{debug, info, timer};
 
 use super::{AssetBlockchainData, AssetUserDefinedData, AsyncWriteCache, InvalidateCacheMode};
 use crate::services::assets::{MgetOptions, SearchRequest, Service};
+
+const REDIS_CONCURRENCY_LIMIT: usize = 10;
 
 pub async fn run<S, BDC, UDDC>(
     assets_service: Arc<S>,
@@ -67,14 +70,19 @@ where
             assets_blockchain_data_cache.clear().await?;
 
             debug!("setting new cache"; "assets count" => all_assets_blockchain_data.len());
-            let fs = all_assets_blockchain_data
-                .iter()
-                .map(|asset_info| {
-                    let a = AssetBlockchainData::from(asset_info);
-                    assets_blockchain_data_cache.set(a.id.clone(), a)
+            stream::iter(all_assets_blockchain_data)
+                .for_each_concurrent(REDIS_CONCURRENCY_LIMIT, |asset_info| {
+                    let assets_blockchain_data_cache = assets_blockchain_data_cache.clone();
+                    async move {
+                        let a = AssetBlockchainData::from(&asset_info);
+                        println!("set blockchain data for {}", a.id);
+                        assets_blockchain_data_cache
+                            .set(a.id.clone(), a)
+                            .await
+                            .unwrap()
+                    }
                 })
-                .collect::<Vec<_>>();
-            futures::future::try_join_all(fs).await?;
+                .await;
         }
 
         info!("cache succcessfully invalidated");
@@ -91,17 +99,27 @@ where
         assets_user_defined_data_redis_cache.clear().await?;
 
         debug!("setting new cache"; "assets_user_defined_data count" => assets_user_defined_data.len());
-        let fs = assets_user_defined_data
-            .iter()
-            .map(|asset_user_defined_data| {
-                let asset_user_defined_data = AssetUserDefinedData::from(asset_user_defined_data);
-                assets_user_defined_data_redis_cache.set(
-                    asset_user_defined_data.asset_id.clone(),
-                    asset_user_defined_data.clone(),
-                )
+
+        stream::iter(&assets_user_defined_data)
+            .for_each_concurrent(REDIS_CONCURRENCY_LIMIT, |asset_user_defined_data| {
+                let cache = assets_user_defined_data_redis_cache.clone();
+                async move {
+                    let asset_user_defined_data_ =
+                        AssetUserDefinedData::from(asset_user_defined_data);
+                    println!(
+                        "set user defined data for {}",
+                        asset_user_defined_data_.asset_id
+                    );
+                    cache
+                        .set(
+                            asset_user_defined_data_.asset_id.clone(),
+                            asset_user_defined_data_.clone(),
+                        )
+                        .await
+                        .unwrap();
+                }
             })
-            .collect::<Vec<_>>();
-        futures::future::try_join_all(fs).await?;
+            .await;
     }
 
     Ok(())
