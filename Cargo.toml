@@ -1,6 +1,6 @@
 [package]
 name = "asset-search-rs"
-version = "1.1.1"
+version = "1.2.0"
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -9,11 +9,12 @@ edition = "2018"
 anyhow = "1.0"
 async-trait = "0.1"
 base64 = "0.13"
+bb8 = { git = "https://github.com/Barre/bb8", branch = "multiplexed-connections" }
+bb8-redis = { git = "https://github.com/Barre/bb8", branch = "multiplexed-connections", features = ["multiplexed-connections"] }
 bigdecimal = { version = "0.3", features = ["serde"] }
 blake2 = "0.9"
 bs58 = "0.4"
 bytes = "1.1"
-cached = "0.26"
 chrono = { version = "0.4", features = ["serde"] }
 diesel = { version = "1.4", default-features = false, features = ["chrono", "postgres", "r2d2"] }
 diesel-derive-enum = { version = "1.1.1", features = ["postgres"] }

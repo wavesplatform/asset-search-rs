@@ -3,7 +3,7 @@ use app_lib::{
     cache::{
         self, ASSET_BLOCKCHAIN_DATA_KEY_PREFIX, ASSET_USER_DEFINED_DATA_KEY_PREFIX, KEY_SEPARATOR,
     },
-    config, consumer, db, redis,
+    config, consumer, db, sync_redis,
 };
 use std::sync::Arc;
 use wavesexchange_log::{error, info};
@@ -23,14 +23,14 @@ async fn main() -> Result<()> {
 
     let pg_repo = Arc::new(consumer::repo::pg::new(conn));
 
-    let redis_pool = redis::pool(&config.redis)?;
+    let redis_pool = sync_redis::pool(&config.redis)?;
 
-    let blockchain_data_cache = cache::redis::new(
+    let blockchain_data_cache = cache::sync_redis_cache::new(
         redis_pool.clone(),
         ASSET_BLOCKCHAIN_DATA_KEY_PREFIX,
         KEY_SEPARATOR,
     );
-    let user_defined_data_cache = cache::redis::new(
+    let user_defined_data_cache = cache::sync_redis_cache::new(
         redis_pool,
         ASSET_USER_DEFINED_DATA_KEY_PREFIX,
         KEY_SEPARATOR,

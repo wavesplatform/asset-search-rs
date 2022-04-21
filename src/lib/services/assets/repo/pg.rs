@@ -34,7 +34,7 @@ lazy_static! {
         CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ib.regular_balance END AS sponsor_regular_balance,
         CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ol.amount END          AS sponsor_out_leasing
         FROM assets AS a
-        LEFT JOIN blocks_microblocks bm ON a.block_uid = bm.uid
+        LEFT JOIN blocks_microblocks bm ON (SELECT min(block_uid) FROM assets WHERE id = a.id) = bm.uid
         LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = {}
         LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = {}
     ", MAX_UID, MAX_UID);
@@ -166,11 +166,12 @@ impl Repo for PgRepo {
                     ({}) AS search
                 LEFT JOIN assets AS a ON a.id = search.id AND a.superseded_by = {}
                 LEFT JOIN predefined_verifications AS pv ON pv.asset_id = search.id
-                LEFT JOIN (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id, 'wa_verified'::asset_wx_label_value_type FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS awl ON awl.asset_id = search.id
+                LEFT JOIN (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id, {} FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS awl ON awl.asset_id = search.id
                 {}
                 ORDER BY search.id ASC, search.rank DESC",
                 search_query,
                 MAX_UID,
+                AssetWxLabelValueType::CommunityVerified,
                 oracle_address,
                 MAX_UID,
                 conditions
@@ -202,11 +203,12 @@ impl Repo for PgRepo {
                 FROM
                     (SELECT a.id, a.smart, (SELECT min(a1.block_uid) FROM assets a1 WHERE a1.id = a.id) AS block_uid, a.issuer FROM assets AS a WHERE a.superseded_by = {} AND a.nft = {}) AS a
                 LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id
-                LEFT JOIN (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id, 'wa_verified'::asset_wx_label_value_type FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS awl ON awl.asset_id = a.id
+                LEFT JOIN (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id, {} FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS awl ON awl.asset_id = a.id
                 {}
                 ORDER BY a.block_uid ASC",
                 MAX_UID,
                 false,
+                AssetWxLabelValueType::CommunityVerified,
                 oracle_address,
                 MAX_UID,
                 conditions
@@ -362,8 +364,8 @@ fn generate_assets_user_defined_data_base_sql_query(oracle_address: &str) -> Str
         COALESCE(awl.labels, ARRAY[]::asset_wx_label_value_type[])  AS labels
         FROM assets a
         LEFT JOIN predefined_verifications pv ON a.id = pv.asset_id
-        LEFT JOIN (SELECT asset_id, ARRAY_AGG(label) as labels FROM (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id AS asset_id, 'wa_verified'::asset_wx_label_value_type AS label FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS l GROUP BY asset_id) AS awl ON awl.asset_id = a.id
-    ", oracle_address, MAX_UID)
+        LEFT JOIN (SELECT asset_id, ARRAY_AGG(label) as labels FROM (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id AS asset_id, {} AS label FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS l GROUP BY asset_id) AS awl ON awl.asset_id = a.id
+    ", AssetWxLabelValueType::CommunityVerified, oracle_address, MAX_UID)
 }
 
 mod utils {

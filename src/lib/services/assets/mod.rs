@@ -53,10 +53,15 @@ impl MgetOptions {
     }
 }
 
+#[async_trait::async_trait]
 pub trait Service {
-    fn get(&self, id: &str, opts: &GetOptions) -> Result<Option<AssetInfo>, AppError>;
+    async fn get(&self, id: &str, opts: &GetOptions) -> Result<Option<AssetInfo>, AppError>;
 
-    fn mget(&self, ids: &[&str], opts: &MgetOptions) -> Result<Vec<Option<AssetInfo>>, AppError>;
+    async fn mget(
+        &self,
+        ids: &[&str],
+        opts: &MgetOptions,
+    ) -> Result<Vec<Option<AssetInfo>>, AppError>;
 
     fn search(&self, req: &SearchRequest) -> Result<Vec<String>, AppError>;
 
@@ -65,9 +70,9 @@ pub trait Service {
 
 pub struct AssetsService {
     repo: Arc<dyn repo::Repo + Send + Sync>,
-    asset_blockhaind_data_cache: Box<dyn cache::SyncReadCache<AssetBlockchainData> + Send + Sync>,
+    asset_blockhaind_data_cache: Box<dyn cache::AsyncReadCache<AssetBlockchainData> + Send + Sync>,
     asset_user_defined_data_cache:
-        Box<dyn cache::SyncReadCache<AssetUserDefinedData> + Send + Sync>,
+        Box<dyn cache::AsyncReadCache<AssetUserDefinedData> + Send + Sync>,
     waves_association_address: String,
 }
 
@@ -75,10 +80,10 @@ impl AssetsService {
     pub fn new(
         repo: Arc<dyn repo::Repo + Send + Sync>,
         asset_blockhaind_data_cache: Box<
-            dyn cache::SyncReadCache<AssetBlockchainData> + Send + Sync,
+            dyn cache::AsyncReadCache<AssetBlockchainData> + Send + Sync,
         >,
         asset_user_defined_data_cache: Box<
-            dyn cache::SyncReadCache<AssetUserDefinedData> + Send + Sync,
+            dyn cache::AsyncReadCache<AssetUserDefinedData> + Send + Sync,
         >,
         waves_association_address: &str,
     ) -> Self {
@@ -91,8 +96,9 @@ impl AssetsService {
     }
 }
 
+#[async_trait::async_trait]
 impl Service for AssetsService {
-    fn get(&self, id: &str, opts: &GetOptions) -> Result<Option<AssetInfo>, AppError> {
+    async fn get(&self, id: &str, opts: &GetOptions) -> Result<Option<AssetInfo>, AppError> {
         // fetch asset blockchain data
         //   if is some -> return cached
         //   else -> go to pg
@@ -103,7 +109,7 @@ impl Service for AssetsService {
         let cached_asset = if opts.bypass_cache {
             None
         } else {
-            self.asset_blockhaind_data_cache.get(id)?
+            self.asset_blockhaind_data_cache.get(id).await?
         };
 
         let asset_blockchain_data = if let Some(cached) = cached_asset {
@@ -143,7 +149,7 @@ impl Service for AssetsService {
             let cached_asset_user_defined_data = if opts.bypass_cache {
                 None
             } else {
-                self.asset_user_defined_data_cache.get(id)?
+                self.asset_user_defined_data_cache.get(id).await?
             };
 
             let asset_user_defined_data = if let Some(cached) = cached_asset_user_defined_data {
@@ -163,7 +169,11 @@ impl Service for AssetsService {
         }
     }
 
-    fn mget(&self, ids: &[&str], opts: &MgetOptions) -> Result<Vec<Option<AssetInfo>>, AppError> {
+    async fn mget(
+        &self,
+        ids: &[&str],
+        opts: &MgetOptions,
+    ) -> Result<Vec<Option<AssetInfo>>, AppError> {
         let assets = match opts.height {
             Some(height) => {
                 let assets = {
@@ -243,7 +253,7 @@ impl Service for AssetsService {
                 let cached_assets = if opts.bypass_cache {
                     vec![None; ids.len()]
                 } else {
-                    self.asset_blockhaind_data_cache.mget(ids)?
+                    self.asset_blockhaind_data_cache.mget(ids).await?
                 };
 
                 let not_cached_asset_ids = cached_assets
@@ -314,7 +324,7 @@ impl Service for AssetsService {
                 let cached_assets_user_defined_data = if opts.bypass_cache {
                     vec![None; ids.len()]
                 } else {
-                    self.asset_user_defined_data_cache.mget(ids)?
+                    self.asset_user_defined_data_cache.mget(ids).await?
                 };
 
                 let not_cached_asset_user_defined_data_ids = cached_assets_user_defined_data

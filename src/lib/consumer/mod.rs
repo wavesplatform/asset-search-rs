@@ -526,16 +526,16 @@ where
                 }
             }
 
-            let wa_verified_asset_label_update = asset_info_updates
+            let asset_label_update = asset_info_updates
                 .iter()
                 .filter_map(|au| match au {
                     AssetInfoUpdate::OraclesData(oracles_data) => Some(oracles_data),
                     _ => None,
                 })
                 .last()
-                .and_then(|oracles_data| extract_wa_verified_asset_label_update(oracles_data));
+                .and_then(|oracles_data| extract_asset_label_update(oracles_data));
 
-            if let Some(wa_verified_asset_label_update) = wa_verified_asset_label_update {
+            if let Some(asset_label_update) = asset_label_update {
                 let current_asset_user_defined_data = match cached_user_defined_data
                     .get(asset_id.as_str())
                     .and_then(|o| o.clone())
@@ -549,7 +549,7 @@ where
                     },
                 };
 
-                let new_asset_user_defined_data = match wa_verified_asset_label_update {
+                let new_asset_user_defined_data = match asset_label_update {
                     AssetLabelUpdate::SetLabel(label) => {
                         current_asset_user_defined_data.add_label(&label)
                     }
@@ -1339,14 +1339,11 @@ where
     );
 
     asset_ids.iter().try_for_each(|asset_id| {
-        let wa_verified_asset_label_update =
-            assets_oracles_data
-                .get(asset_id.to_owned())
-                .and_then(|asset_oracles_data| {
-                    extract_wa_verified_asset_label_update(asset_oracles_data)
-                });
+        let asset_label_update = assets_oracles_data
+            .get(asset_id.to_owned())
+            .and_then(|asset_oracles_data| extract_asset_label_update(asset_oracles_data));
 
-        if let Some(wa_verified_asset_label_update) = wa_verified_asset_label_update {
+        if let Some(asset_label_update) = asset_label_update {
             let current_asset_user_defined_data = match cached_user_defined_data.get(*asset_id) {
                 Some(cached) => cached.to_owned(),
                 _ => AssetUserDefinedData {
@@ -1357,7 +1354,7 @@ where
                 },
             };
 
-            let new_asset_user_defined_data = match wa_verified_asset_label_update {
+            let new_asset_user_defined_data = match asset_label_update {
                 AssetLabelUpdate::SetLabel(label) => {
                     current_asset_user_defined_data.add_label(&label)
                 }
@@ -1505,11 +1502,8 @@ fn is_asset_label_data_entry(key: &str, asset_id: &str) -> bool {
     *key == format!("status_<{}>", asset_id)
 }
 
-/// Extracts AssetLabelUpdate for WaVerified
-///
-/// At this moment it should be WaVerified label only,
-/// but in the future it can be WaVerified | CommunityVerified labels depends on oracle address
-fn extract_wa_verified_asset_label_update(
+/// Extracts AssetLabelUpdate for CommunityVerified
+fn extract_asset_label_update(
     oracles_data: &HashMap<String, Vec<AssetOracleDataEntry>>,
 ) -> Option<AssetLabelUpdate> {
     oracles_data.iter().fold(None, |_, (_oracle_address, des)| {
@@ -1519,10 +1513,10 @@ fn extract_wa_verified_asset_label_update(
                     Some(verification_status) => {
                         if verification_status == ASSET_ORACLE_VERIFICATION_STATUS_VERIFIED {
                             // there is update, set new label
-                            Some(AssetLabelUpdate::SetLabel(AssetLabel::WaVerified))
+                            Some(AssetLabelUpdate::SetLabel(AssetLabel::CommunityVerified))
                         } else {
                             // there is update, unset label
-                            Some(AssetLabelUpdate::DeleteLabel(AssetLabel::WaVerified))
+                            Some(AssetLabelUpdate::DeleteLabel(AssetLabel::CommunityVerified))
                         }
                     }
                     // there is no update
@@ -1665,7 +1659,7 @@ mod tests {
     };
 
     use super::{
-        escape_unicode_null, extract_wa_verified_asset_label_update, is_asset_label_data_entry,
+        escape_unicode_null, extract_asset_label_update, is_asset_label_data_entry,
         AssetLabelUpdate,
     };
 
@@ -1737,7 +1731,7 @@ mod tests {
         .collect::<HashMap<String, Vec<AssetOracleDataEntry>>>();
 
         assert!(matches!(
-            extract_wa_verified_asset_label_update(&oracles_data),
+            extract_asset_label_update(&oracles_data),
             Some(AssetLabelUpdate::SetLabel(AssetLabel::WaVerified))
         ));
 
@@ -1754,7 +1748,7 @@ mod tests {
         .collect::<HashMap<String, Vec<AssetOracleDataEntry>>>();
 
         assert!(matches!(
-            extract_wa_verified_asset_label_update(&oracles_data),
+            extract_asset_label_update(&oracles_data),
             Some(AssetLabelUpdate::DeleteLabel(AssetLabel::WaVerified))
         ));
 
@@ -1766,9 +1760,6 @@ mod tests {
         .into_iter()
         .collect::<HashMap<String, Vec<AssetOracleDataEntry>>>();
 
-        assert!(matches!(
-            extract_wa_verified_asset_label_update(&oracles_data),
-            None
-        ));
+        assert!(matches!(extract_asset_label_update(&oracles_data), None));
     }
 }

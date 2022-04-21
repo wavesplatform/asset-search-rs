@@ -4,34 +4,35 @@ use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-use crate::cache::{AssetUserDefinedData, SyncWriteCache};
+use crate::cache::{AssetUserDefinedData, AsyncWriteCache};
 use crate::db::enums::{AssetWxLabelValueType, VerificationStatusValueType};
 use crate::error::Error as AppError;
 use crate::models::{AssetLabel, VerificationStatus};
 
+#[async_trait::async_trait]
 pub trait Service {
-    fn update_verification_status(
+    async fn update_verification_status(
         &self,
         id: &str,
         verification_status: &VerificationStatus,
     ) -> Result<(), AppError>;
 
-    fn update_ticker(&self, id: &str, ticker: Option<&str>) -> Result<(), AppError>;
+    async fn update_ticker(&self, id: &str, ticker: Option<&str>) -> Result<(), AppError>;
 
-    fn add_label(&self, id: &str, label: &AssetLabel) -> Result<(), AppError>;
+    async fn add_label(&self, id: &str, label: &AssetLabel) -> Result<(), AppError>;
 
-    fn delete_label(&self, id: &str, label: &AssetLabel) -> Result<(), AppError>;
+    async fn delete_label(&self, id: &str, label: &AssetLabel) -> Result<(), AppError>;
 }
 
 pub struct AdminAssetsService {
     pub repo: Arc<dyn repo::Repo + Send + Sync>,
-    pub user_defined_data_cache: Box<dyn SyncWriteCache<AssetUserDefinedData> + Send + Sync>,
+    pub user_defined_data_cache: Box<dyn AsyncWriteCache<AssetUserDefinedData> + Send + Sync>,
 }
 
 impl AdminAssetsService {
     pub fn new(
         repo: Arc<dyn repo::Repo + Send + Sync>,
-        user_defined_data_cache: Box<dyn SyncWriteCache<AssetUserDefinedData> + Send + Sync>,
+        user_defined_data_cache: Box<dyn AsyncWriteCache<AssetUserDefinedData> + Send + Sync>,
     ) -> Self {
         Self {
             repo,
@@ -40,8 +41,9 @@ impl AdminAssetsService {
     }
 }
 
+#[async_trait::async_trait]
 impl Service for AdminAssetsService {
-    fn update_verification_status(
+    async fn update_verification_status(
         &self,
         id: &str,
         verification_status: &VerificationStatus,
@@ -55,6 +57,7 @@ impl Service for AdminAssetsService {
             let asset_user_defined_data = if let Some(cached_data) = self
                 .user_defined_data_cache
                 .get(id)
+                .await
                 .map_err(|e| AppError::CacheError(format!("{}", e)))?
             {
                 AssetUserDefinedData {
@@ -73,7 +76,8 @@ impl Service for AdminAssetsService {
             };
 
             self.user_defined_data_cache
-                .set(id, asset_user_defined_data)?;
+                .set(id.to_owned(), asset_user_defined_data)
+                .await?;
 
             Ok(())
         } else {
@@ -81,7 +85,7 @@ impl Service for AdminAssetsService {
         }
     }
 
-    fn update_ticker(&self, id: &str, ticker: Option<&str>) -> Result<(), AppError> {
+    async fn update_ticker(&self, id: &str, ticker: Option<&str>) -> Result<(), AppError> {
         if self
             .repo
             .update_ticker(id, ticker)
@@ -91,6 +95,7 @@ impl Service for AdminAssetsService {
             let asset_user_defined_data = if let Some(cached_data) = self
                 .user_defined_data_cache
                 .get(id)
+                .await
                 .map_err(|e| AppError::CacheError(format!("{}", e)))?
             {
                 AssetUserDefinedData {
@@ -109,7 +114,8 @@ impl Service for AdminAssetsService {
             };
 
             self.user_defined_data_cache
-                .set(id, asset_user_defined_data)?;
+                .set(id.to_owned(), asset_user_defined_data)
+                .await?;
 
             Ok(())
         } else {
@@ -117,7 +123,7 @@ impl Service for AdminAssetsService {
         }
     }
 
-    fn add_label(&self, id: &str, label: &AssetLabel) -> Result<(), AppError> {
+    async fn add_label(&self, id: &str, label: &AssetLabel) -> Result<(), AppError> {
         let l = AssetWxLabelValueType::try_from(label)?;
 
         if self
@@ -131,6 +137,7 @@ impl Service for AdminAssetsService {
             let asset_user_defined_data = if let Some(cached_data) = self
                 .user_defined_data_cache
                 .get(id)
+                .await
                 .map_err(|e| AppError::CacheError(format!("{}", e)))?
             {
                 let mut labels: HashSet<AssetLabel> = cached_data
@@ -155,7 +162,8 @@ impl Service for AdminAssetsService {
             };
 
             self.user_defined_data_cache
-                .set(id, asset_user_defined_data)?;
+                .set(id.to_owned(), asset_user_defined_data)
+                .await?;
 
             Ok(())
         } else {
@@ -163,7 +171,7 @@ impl Service for AdminAssetsService {
         }
     }
 
-    fn delete_label(&self, id: &str, label: &AssetLabel) -> Result<(), AppError> {
+    async fn delete_label(&self, id: &str, label: &AssetLabel) -> Result<(), AppError> {
         let l = AssetWxLabelValueType::try_from(label)?;
 
         if self
@@ -177,6 +185,7 @@ impl Service for AdminAssetsService {
             let asset_user_defined_data = if let Some(cached_data) = self
                 .user_defined_data_cache
                 .get(id)
+                .await
                 .map_err(|e| AppError::CacheError(format!("{}", e)))?
             {
                 let labels = cached_data
@@ -201,7 +210,8 @@ impl Service for AdminAssetsService {
             };
 
             self.user_defined_data_cache
-                .set(id, asset_user_defined_data)?;
+                .set(id.to_owned(), asset_user_defined_data)
+                .await?;
 
             Ok(())
         } else {
