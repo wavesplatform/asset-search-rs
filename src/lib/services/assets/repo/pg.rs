@@ -18,7 +18,7 @@ use crate::schema::data_entries;
 const MAX_UID: i64 = i64::MAX - 1;
 
 lazy_static! {
-    static ref ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY: String =  format!("SELECT DISTINCT ON (a.id)
+    static ref ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY: String =  format!("SELECT
         a.id,
         a.name,
         a.precision,
@@ -238,7 +238,7 @@ impl Repo for PgRepo {
 
     fn get(&self, id: &str) -> Result<Option<Asset>, AppError> {
         let q = sql_query(&format!(
-            "{} WHERE a.nft = false AND a.superseded_by = $1 AND a.id = $2 ORDER BY a.id, a.uid DESC LIMIT 1",
+            "{} WHERE a.uid = (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = $2 ORDER BY a.id, a.uid DESC LIMIT 1)",
             ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY.as_str()
         ))
         .bind::<BigInt, _>(MAX_UID)
@@ -252,7 +252,7 @@ impl Repo for PgRepo {
 
     fn mget(&self, ids: &[&str]) -> Result<Vec<Option<Asset>>, AppError> {
         let q = sql_query(&format!(
-            "{} WHERE a.nft = false AND a.superseded_by = $1 AND a.id = ANY($2) ORDER BY a.id, a.uid DESC",
+            "{} WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = ANY($2) ORDER BY a.id, a.uid DESC)",
             ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY.as_str()
         ))
         .bind::<BigInt, _>(MAX_UID)
@@ -266,7 +266,7 @@ impl Repo for PgRepo {
 
     fn mget_for_height(&self, ids: &[&str], height: i32) -> Result<Vec<Option<Asset>>, AppError> {
         let q = sql_query(&format!("
-            {} WHERE a.nft = false AND a.id = ANY($1) AND a.block_uid <= (SELECT uid FROM blocks_microblocks WHERE height = $2 LIMIT 1) ORDER BY a.id, a.uid DESC", ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY.as_str()))
+            {} WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.id = ANY($1) AND a.block_uid <= (SELECT uid FROM blocks_microblocks WHERE height = $2 LIMIT 1) ORDER BY a.id, a.uid DESC)", ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY.as_str()))
             .bind::<Array<Text>, _>(ids)
             .bind::<Integer, _>(height);
 
