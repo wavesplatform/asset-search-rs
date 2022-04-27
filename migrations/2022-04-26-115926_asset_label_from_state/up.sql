@@ -12,3 +12,41 @@ CREATE TABLE IF NOT EXISTS asset_labels (
     labels TEXT[] NOT NULL,
     PRIMARY KEY (superseded_by, asset_id)
 );
+
+
+CREATE OR REPLACE FUNCTION reopen_asset_labels() RETURNS VOID 
+    language plpgsql 
+AS $$
+BEGIN
+    UPDATE
+        asset_labels
+    SET
+        superseded_by = 9223372036854775806
+    WHERE
+    uid IN (
+        SELECT
+            al1.uid
+        FROM
+            asset_labels al1
+            LEFT JOIN asset_labels al2 ON al1.superseded_by = al2.uid
+        WHERE
+            al1.superseded_by != 9223372036854775806
+            AND al2.uid IS NULL
+    );
+END;
+$$;
+
+
+CREATE OR REPLACE FUNCTION rollback_to(target_height INTEGER) RETURNS VOID 
+    language plpgsql 
+AS $$ 
+BEGIN
+    DELETE FROM blocks_microblocks WHERE height >= target_height;
+
+    EXECUTE reopen_assets();
+    EXECUTE reopen_asset_labels();
+    EXECUTE reopen_data_entries();
+    EXECUTE reopen_issuer_balances();
+    EXECUTE reopen_out_leasings();
+END;
+$$;
