@@ -432,7 +432,7 @@ impl Repo for PgRepoImpl {
             superseded_by_uids.push(&u.superseded_by);
         });
 
-        let q = diesel::sql_query("UPDATE asset_labels SET superseded_by = updates.superseded_by FROM (SELECT UNNEST($1::text[]) as asset_id, UNNEST($2::int8[]) as superseded_by) AS updates WHERE asset_labels.asset_id = updates.asset_id AND asset_labels.superseded_by = $4;")
+        let q = diesel::sql_query("UPDATE asset_labels SET superseded_by = updates.superseded_by FROM (SELECT UNNEST($1::text[]) as asset_id, UNNEST($2::int8[]) as superseded_by) AS updates WHERE asset_labels.asset_id = updates.asset_id AND asset_labels.superseded_by = $3;")
             .bind::<Array<VarChar>, _>(asset_ids)
             .bind::<Array<BigInt>, _>(superseded_by_uids)
             .bind::<BigInt, _>(MAX_UID);
