@@ -4,6 +4,10 @@ use diesel::pg::PgConnection;
 use diesel::sql_types::{Array, BigInt, Bool, Text, VarChar};
 use diesel::{prelude::*, sql_query};
 
+use super::super::models::asset::OracleDataEntry;
+use super::super::models::asset_labels::{
+    AssetLabels, AssetLabelsOverride, DeletedAssetLabels, InsertableAssetLabels,
+};
 use super::super::models::{
     asset::{AssetOverride, DeletedAsset, InsertableAsset, QueryableAsset},
     block_microblock::BlockMicroblock,
@@ -15,12 +19,12 @@ use super::super::models::{
 };
 use super::super::PrevHandledHeight;
 use super::Repo;
-use crate::consumer::models::asset::OracleDataEntry;
 use crate::db::enums::DataEntryValueTypeMapping;
 use crate::error::Error as AppError;
 use crate::schema::{
-    assets, assets_uid_seq, blocks_microblocks, data_entries, data_entries_uid_seq,
-    issuer_balances, issuer_balances_uid_seq, out_leasings, out_leasings_uid_seq,
+    asset_labels, asset_labels_uid_seq, assets, assets_uid_seq, blocks_microblocks, data_entries,
+    data_entries_uid_seq, issuer_balances, issuer_balances_uid_seq, out_leasings,
+    out_leasings_uid_seq,
 };
 use crate::tuple_len::TupleLen;
 use crate::waves::WAVES_ID;
@@ -360,6 +364,124 @@ impl Repo for PgRepoImpl {
             let context = format!("Cannot issuer {} assets: {}", issuer.as_ref(), err);
             Error::new(AppError::DbDieselError(err)).context(context)
         })
+    }
+
+    //
+    // ASSET LABELS
+    //
+
+    fn mget_asset_labels(&self, asset_ids: &[&str]) -> Result<Vec<AssetLabels>> {
+        let q = asset_labels::table
+            .select((asset_labels::asset_id, asset_labels::labels))
+            .filter(asset_labels::superseded_by.eq(MAX_UID))
+            .filter(asset_labels::asset_id.eq_any(asset_ids));
+
+        q.load(&self.conn).map_err(|err| {
+            let context = format!("Cannot assets labels: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
+    }
+
+    fn get_next_asset_labels_uid(&self) -> Result<i64> {
+        asset_labels_uid_seq::table
+            .select(asset_labels_uid_seq::last_value)
+            .first(&self.conn)
+            .map_err(|err| {
+                let context = format!("Cannot get next asset labels update uid: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn insert_asset_labels(&self, labels: &Vec<InsertableAssetLabels>) -> Result<()> {
+        let columns_count = asset_labels::table::all_columns().len();
+        let chunk_size = (PG_MAX_INSERT_FIELDS_COUNT / columns_count) / 10 * 10;
+        labels
+            .to_owned()
+            .chunks(chunk_size)
+            .into_iter()
+            .try_fold((), |_, chunk| {
+                diesel::insert_into(asset_labels::table)
+                    .values(chunk)
+                    .execute(&self.conn)
+                    .map(|_| ())
+            })
+            .map_err(|err| {
+                let context = format!("Cannot insert new asset labels: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn update_asset_labels_block_references(&self, block_uid: &i64) -> Result<()> {
+        diesel::update(asset_labels::table)
+            .set((asset_labels::block_uid.eq(block_uid),))
+            .filter(asset_labels::block_uid.gt(block_uid))
+            .execute(&self.conn)
+            .map(|_| ())
+            .map_err(|err| {
+                let context = format!("Cannot update asset_labels block references: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn close_asset_labels_superseded_by(&self, updates: &Vec<AssetLabelsOverride>) -> Result<()> {
+        let mut asset_ids = vec![];
+        let mut superseded_by_uids = vec![];
+
+        updates.iter().for_each(|u| {
+            asset_ids.push(&u.asset_id);
+            superseded_by_uids.push(&u.superseded_by);
+        });
+
+        let q = diesel::sql_query("UPDATE asset_labels SET superseded_by = updates.superseded_by FROM (SELECT UNNEST($1::text[]) as asset_id, UNNEST($2::int8[]) as superseded_by) AS updates WHERE asset_labels.asset_id = updates.asset_id AND asset_labels.superseded_by = $4;")
+            .bind::<Array<VarChar>, _>(asset_ids)
+            .bind::<Array<BigInt>, _>(superseded_by_uids)
+            .bind::<BigInt, _>(MAX_UID);
+
+        q.execute(&self.conn).map(|_| ()).map_err(|err| {
+            let context = format!("Cannot close asset_labels superseded_by: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
+    }
+
+    fn reopen_asset_labels_superseded_by(&self, current_superseded_by: &Vec<i64>) -> Result<()> {
+        diesel::sql_query("UPDATE asset_labels SET superseded_by = $1 FROM (SELECT UNNEST($2) AS superseded_by) AS current WHERE asset_labels.superseded_by = current.superseded_by;")
+            .bind::<BigInt, _>(MAX_UID)
+            .bind::<Array<BigInt>, _>(current_superseded_by)
+            .execute(&self.conn)
+            .map(|_| ())
+            .map_err(|err| {
+                let context = format!("Cannot reopen asset_labels superseded_by: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn set_asset_labels_next_update_uid(&self, new_uid: i64) -> Result<()> {
+        diesel::sql_query(format!(
+            "select setval('asset_labels_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
+            new_uid
+        ))
+        .execute(&self.conn)
+        .map(|_| ())
+        .map_err(|err| {
+            let context = format!("Cannot set asset_labels next update uid: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
+    }
+
+    fn rollback_asset_labels(&self, block_uid: &i64) -> Result<Vec<DeletedAssetLabels>> {
+        diesel::delete(asset_labels::table)
+            .filter(asset_labels::block_uid.gt(block_uid))
+            .returning((asset_labels::uid, asset_labels::asset_id))
+            .get_results(&self.conn)
+            .map(|bs| {
+                bs.into_iter()
+                    .map(|(uid, asset_id)| DeletedAssetLabels { uid, asset_id })
+                    .collect()
+            })
+            .map_err(|err| {
+                let context = format!("Cannot rollback asset_labels: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
     }
 
     //

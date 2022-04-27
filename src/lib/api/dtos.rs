@@ -2,7 +2,7 @@ use serde::{Deserialize, Deserializer};
 use validator::{Validate, ValidationError};
 
 use super::DEFAULT_LIMIT;
-use crate::models::{AssetLabel, VerificationStatus};
+use crate::models::VerificationStatus;
 use crate::waves::is_valid_base58;
 
 #[derive(Clone, Debug, Deserialize, Validate)]
@@ -14,7 +14,7 @@ pub struct SearchRequest {
     pub smart: Option<bool>,
     pub verified_status: Option<Vec<VerificationStatus>>,
     #[serde(rename = "label__in")]
-    pub asset_label_in: Option<Vec<AssetLabel>>,
+    pub asset_label_in: Option<Vec<String>>,
     #[serde(rename = "issuer__in")]
     #[validate(custom = "validate_issuer_in")]
     pub issuer_in: Option<Vec<String>>,

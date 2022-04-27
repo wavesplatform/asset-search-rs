@@ -8,13 +8,10 @@ use std::collections::HashMap;
 use crate::{
     cache::{AssetBlockchainData, AssetUserDefinedData},
     db::enums::{
-        AssetWxLabelValueType, AssetWxLabelValueTypeMapping, DataEntryValueType,
-        VerificationStatusValueType, VerificationStatusValueTypeMapping,
+        DataEntryValueType, VerificationStatusValueType, VerificationStatusValueTypeMapping,
     },
     error::Error as AppError,
-    models::{
-        AssetLabel, AssetOracleDataEntry, AssetSponsorBalance, DataEntryType, VerificationStatus,
-    },
+    models::{AssetOracleDataEntry, AssetSponsorBalance, DataEntryType, VerificationStatus},
 };
 
 #[derive(Clone, Debug, QueryableByName)]
@@ -133,18 +130,14 @@ pub struct UserDefinedData {
     pub ticker: Option<String>,
     #[sql_type = "VerificationStatusValueTypeMapping"]
     pub verification_status: VerificationStatusValueType,
-    #[sql_type = "Array<AssetWxLabelValueTypeMapping>"]
-    pub labels: Vec<AssetWxLabelValueType>,
+    #[sql_type = "Array<Text>"]
+    pub labels: Vec<String>,
 }
 
 impl From<&UserDefinedData> for AssetUserDefinedData {
     fn from(d: &UserDefinedData) -> Self {
         let verification_status = VerificationStatus::from(&d.verification_status);
-        let labels = d
-            .labels
-            .iter()
-            .map(|l| AssetLabel::from(l))
-            .collect::<Vec<_>>();
+        let labels = d.labels.clone().into_iter().collect::<Vec<_>>();
         Self {
             asset_id: d.asset_id.clone(),
             ticker: d.ticker.clone(),

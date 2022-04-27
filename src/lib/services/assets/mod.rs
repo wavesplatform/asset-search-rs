@@ -155,9 +155,7 @@ impl Service for AssetsService {
             let asset_user_defined_data = if let Some(cached) = cached_asset_user_defined_data {
                 cached
             } else {
-                let data = self
-                    .repo
-                    .get_asset_user_defined_data(&id, &self.waves_association_address)?;
+                let data = self.repo.get_asset_user_defined_data(&id)?;
                 AssetUserDefinedData::from(&data)
             };
 
@@ -202,8 +200,7 @@ impl Service for AssetsService {
 
                 let assets_user_defined_data = {
                     timer!("assets_service::mget::mget_asset_user_defined_data");
-                    self.repo
-                        .mget_asset_user_defined_data(&ids, &self.waves_association_address)?
+                    self.repo.mget_asset_user_defined_data(&ids)?
                 };
 
                 let assets_user_defined_data =
@@ -340,9 +337,7 @@ impl Service for AssetsService {
                     .collect_vec();
 
                 let assets_user_defined_data = if not_cached_asset_user_defined_data_ids.len() > 0 {
-                    let assets_user_defined_data = self
-                        .repo
-                        .mget_asset_user_defined_data(&ids, &self.waves_association_address)?;
+                    let assets_user_defined_data = self.repo.mget_asset_user_defined_data(&ids)?;
 
                     cached_assets_user_defined_data
                         .into_iter()
@@ -412,18 +407,15 @@ impl Service for AssetsService {
             limit: req.limit,
         };
 
-        self.repo
-            .find(find_params, &self.waves_association_address)
-            .map(|asset_ids| {
-                asset_ids
-                    .iter()
-                    .map(|asset_id| asset_id.id.to_owned())
-                    .collect()
-            })
+        self.repo.find(find_params).map(|asset_ids| {
+            asset_ids
+                .iter()
+                .map(|asset_id| asset_id.id.to_owned())
+                .collect()
+        })
     }
 
     fn user_defined_data(&self) -> Result<Vec<UserDefinedData>, AppError> {
-        self.repo
-            .all_assets_user_defined_data(&self.waves_association_address)
+        self.repo.all_assets_user_defined_data()
     }
 }

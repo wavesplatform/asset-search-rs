@@ -5,6 +5,9 @@ use anyhow::Result;
 use super::models::asset::{
     AssetOverride, DeletedAsset, InsertableAsset, OracleDataEntry, QueryableAsset,
 };
+use super::models::asset_labels::{
+    AssetLabels, AssetLabelsOverride, DeletedAssetLabels, InsertableAssetLabels,
+};
 use super::models::block_microblock::BlockMicroblock;
 use super::models::data_entry::{DataEntryOverride, DeletedDataEntry, InsertableDataEntry};
 use super::models::issuer_balance::{
@@ -68,6 +71,26 @@ pub trait Repo {
     ) -> Result<Vec<OracleDataEntry>>;
 
     fn issuer_assets(&self, issuer_address: impl AsRef<str>) -> Result<Vec<QueryableAsset>>;
+
+    //
+    // ASSET LABELS
+    //
+
+    fn mget_asset_labels(&self, asset_ids: &[&str]) -> Result<Vec<AssetLabels>>;
+
+    fn get_next_asset_labels_uid(&self) -> Result<i64>;
+
+    fn insert_asset_labels(&self, balances: &Vec<InsertableAssetLabels>) -> Result<()>;
+
+    fn update_asset_labels_block_references(&self, block_uid: &i64) -> Result<()>;
+
+    fn close_asset_labels_superseded_by(&self, updates: &Vec<AssetLabelsOverride>) -> Result<()>;
+
+    fn reopen_asset_labels_superseded_by(&self, current_superseded_by: &Vec<i64>) -> Result<()>;
+
+    fn set_asset_labels_next_update_uid(&self, new_uid: i64) -> Result<()>;
+
+    fn rollback_asset_labels(&self, block_uid: &i64) -> Result<Vec<DeletedAssetLabels>>;
 
     //
     // DATA ENTRIES

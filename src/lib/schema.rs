@@ -10,7 +10,23 @@ table! {
 table! {
     asset_wx_labels (asset_id, label) {
         asset_id -> Text,
-        label -> crate::db::enums::AssetWxLabelValueTypeMapping,
+        label -> Text,
+    }
+}
+
+table! {
+    asset_labels (superseded_by, asset_id) {
+        uid -> Int8,
+        superseded_by -> Int8,
+        block_uid -> Int8,
+        asset_id -> Text,
+        labels -> Array<Text>,
+    }
+}
+
+table! {
+    asset_labels_uid_seq (last_value) {
+        last_value -> BigInt,
     }
 }
 

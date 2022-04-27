@@ -5,8 +5,8 @@ use std::convert::TryFrom;
 
 use crate::error::Error as AppError;
 use crate::models::{
-    Asset, AssetInfo, AssetInfoUpdate, AssetLabel, AssetMetadata, AssetOracleDataEntry,
-    AssetSponsorBalance, VerificationStatus,
+    Asset, AssetInfo, AssetInfoUpdate, AssetMetadata, AssetOracleDataEntry, AssetSponsorBalance,
+    VerificationStatus,
 };
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
@@ -61,7 +61,7 @@ pub struct AssetUserDefinedData {
     pub asset_id: String,
     pub ticker: Option<String>,
     pub verification_status: VerificationStatus,
-    pub labels: Vec<AssetLabel>,
+    pub labels: Vec<String>,
 }
 
 impl AssetUserDefinedData {
@@ -70,11 +70,11 @@ impl AssetUserDefinedData {
             asset_id: asset_id.as_ref().to_owned(),
             ticker: None,
             verification_status: VerificationStatus::default(),
-            labels: Vec::<AssetLabel>::new(),
+            labels: Vec::<String>::new(),
         }
     }
 
-    pub fn add_label(&self, label: &AssetLabel) -> Self {
+    pub fn add_label(&self, label: &str) -> Self {
         let mut labels = self.labels.iter().fold(HashSet::new(), |mut acc, cur| {
             acc.insert(cur.to_owned());
             acc
@@ -89,7 +89,7 @@ impl AssetUserDefinedData {
         }
     }
 
-    pub fn delete_label(&self, label: &AssetLabel) -> Self {
+    pub fn delete_label(&self, label: &str) -> Self {
         let labels = self
             .labels
             .iter()
@@ -162,6 +162,10 @@ impl From<(&AssetBlockchainData, &Vec<AssetInfoUpdate>)> for AssetBlockchainData
                 }
                 AssetInfoUpdate::OraclesData(oracle_data) => {
                     cur.oracles_data = oracle_data.to_owned();
+                    cur
+                }
+                AssetInfoUpdate::Labels(_) => {
+                    // It does not need to be handled
                     cur
                 }
                 AssetInfoUpdate::SponsorRegularBalance(regular_balance) => {
