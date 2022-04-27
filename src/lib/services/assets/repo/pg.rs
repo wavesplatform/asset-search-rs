@@ -79,12 +79,12 @@ impl Repo for PgRepo {
             let mut label_filters = vec![];
 
             if asset_labels.contains(&"null".to_string()) {
-                label_filters.push(format!("awl.label IS NULL"));
+                label_filters.push(format!("awl.labels IS NULL"));
             }
 
             if asset_labels.len() > 0 {
                 let labels_filter = format!(
-                    "awl.label = ANY(ARRAY[{}]::text[])",
+                    "awl.labels = ANY(ARRAY[{}]::text[])",
                     asset_labels.iter().join(",")
                 );
                 label_filters.push(labels_filter);
