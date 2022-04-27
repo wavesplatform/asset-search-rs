@@ -85,7 +85,10 @@ impl Repo for PgRepo {
             if asset_labels.len() > 0 {
                 let labels_filter = format!(
                     "awl.labels = ANY(ARRAY[{}]::text[])",
-                    asset_labels.iter().join(",")
+                    asset_labels
+                        .iter()
+                        .map(|label| format!("'{}'", label))
+                        .join(",")
                 );
                 label_filters.push(labels_filter);
             }
