@@ -7,7 +7,7 @@ COPY Cargo.* ./
 COPY ./src ./src
 COPY ./migrations ./migrations
 
-RUN cargo build --release
+RUN cargo install --path .
 
 
 FROM debian:buster-slim as runtime
