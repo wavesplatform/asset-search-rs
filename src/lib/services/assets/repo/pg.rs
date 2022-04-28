@@ -1,6 +1,7 @@
 use diesel::dsl::sql;
+use diesel::pg::Pg;
 use diesel::sql_types::{Array, BigInt, Integer, Text};
-use diesel::{prelude::*, sql_query};
+use diesel::{debug_query, prelude::*, sql_query};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use wavesexchange_log::error;
@@ -84,7 +85,7 @@ impl Repo for PgRepo {
 
             if asset_labels.len() > 0 {
                 let labels_filter = format!(
-                    "awl.labels = ANY(ARRAY[{}]::text[])",
+                    "awl.labels && ARRAY[{}]::text[]",
                     asset_labels
                         .iter()
                         .map(|label| format!("'{}'", label))
@@ -235,6 +236,9 @@ impl Repo for PgRepo {
 
         let q = sql_query(format!("{} ORDER BY a.rn LIMIT $1", query))
             .bind::<Integer, _>(params.limit as i32);
+
+        let dbg = debug_query::<Pg, _>(&q);
+        println!("DEBUG: {}", dbg.to_string());
 
         q.load(&self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
