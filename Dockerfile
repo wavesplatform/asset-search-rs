@@ -11,7 +11,7 @@ RUN cargo build --release
 
 
 FROM debian:buster-slim as runtime
-WORKDIR /app
+WORKDIR /usr/www/app
 
 RUN apt-get update && apt-get install -y curl openssl libssl-dev libpq-dev
 RUN /usr/sbin/update-ca-certificates
