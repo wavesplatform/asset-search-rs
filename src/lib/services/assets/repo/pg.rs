@@ -159,7 +159,7 @@ impl Repo for PgRepo {
                 LEFT JOIN assets AS a ON a.id = search.id AND a.superseded_by = {}
                 LEFT JOIN predefined_verifications AS pv ON pv.asset_id = search.id
                 LEFT JOIN (
-                    SELECT COALESCE(awl.asset_id, al.asset_id) AS asset_id, awl.labels || al.labels AS labels
+                    SELECT COALESCE(awl.asset_id, al.asset_id) AS asset_id, ARRAY(SELECT DISTINCT labels FROM UNNEST(awl.labels || al.labels) AS labels) AS labels
                     FROM (
                         SELECT asset_id, ARRAY_AGG(label) as labels 
                         FROM asset_wx_labels 
@@ -203,7 +203,7 @@ impl Repo for PgRepo {
                     (SELECT a.id, a.smart, (SELECT min(a1.block_uid) FROM assets a1 WHERE a1.id = a.id) AS block_uid, a.issuer FROM assets AS a WHERE a.superseded_by = {} AND a.nft = {}) AS a
                 LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id
                 LEFT JOIN (
-                    SELECT COALESCE(awl.asset_id, al.asset_id) AS asset_id, awl.labels || al.labels AS labels
+                    SELECT COALESCE(awl.asset_id, al.asset_id) AS asset_id, ARRAY(SELECT DISTINCT labels FROM UNNEST(awl.labels || al.labels) AS labels) AS labels
                     FROM (
                         SELECT asset_id, ARRAY_AGG(label) as labels 
                         FROM asset_wx_labels 
@@ -363,7 +363,7 @@ fn generate_assets_user_defined_data_base_sql_query() -> String {
         FROM assets a
         LEFT JOIN predefined_verifications pv ON a.id = pv.asset_id
         LEFT JOIN (
-            SELECT COALESCE(awl.asset_id, al.asset_id) AS asset_id, awl.labels || al.labels AS labels
+            SELECT COALESCE(awl.asset_id, al.asset_id) AS asset_id, ARRAY(SELECT DISTINCT labels FROM UNNEST(awl.labels || al.labels) AS labels) AS labels
             FROM (
                 SELECT asset_id, ARRAY_AGG(label) as labels 
                 FROM asset_wx_labels 
