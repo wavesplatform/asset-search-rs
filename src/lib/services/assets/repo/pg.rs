@@ -159,14 +159,17 @@ impl Repo for PgRepo {
                 LEFT JOIN assets AS a ON a.id = search.id AND a.superseded_by = {}
                 LEFT JOIN predefined_verifications AS pv ON pv.asset_id = search.id
                 LEFT JOIN (
-                    SELECT COALESCE(awl.asset_id, al.asset_id) AS asset_id, ARRAY(SELECT DISTINCT labels FROM UNNEST(awl.labels || al.labels) AS labels) AS labels
+                    SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
                     FROM (
-                        SELECT asset_id, ARRAY_AGG(label) as labels 
-                        FROM asset_wx_labels 
-                        GROUP BY asset_id
-                    ) AS awl 
-                    RIGHT JOIN asset_labels AS al ON awl.asset_id = al.asset_id 
-                    WHERE al.superseded_by = {}
+                        SELECT al.asset_id as asset_id, al.labels
+                        FROM asset_labels AS al
+                        WHERE al.superseded_by = {}
+                        UNION
+                        SELECT awl.asset_id as asset_id, ARRAY_AGG(awl.label) as labels
+                        FROM asset_wx_labels AS awl
+                        GROUP BY awl.asset_id
+                    ) AS data, UNNEST(labels) AS labels_list
+                    GROUP BY asset_id
                 ) AS awl ON awl.asset_id = search.id
                 {}
                 ORDER BY search.id ASC, search.rank DESC",
@@ -203,14 +206,17 @@ impl Repo for PgRepo {
                     (SELECT a.id, a.smart, (SELECT min(a1.block_uid) FROM assets a1 WHERE a1.id = a.id) AS block_uid, a.issuer FROM assets AS a WHERE a.superseded_by = {} AND a.nft = {}) AS a
                 LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id
                 LEFT JOIN (
-                    SELECT COALESCE(awl.asset_id, al.asset_id) AS asset_id, ARRAY(SELECT DISTINCT labels FROM UNNEST(awl.labels || al.labels) AS labels) AS labels
+                    SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
                     FROM (
-                        SELECT asset_id, ARRAY_AGG(label) as labels 
-                        FROM asset_wx_labels 
-                        GROUP BY asset_id
-                    ) AS awl 
-                    RIGHT JOIN asset_labels AS al ON awl.asset_id = al.asset_id 
-                    WHERE al.superseded_by = {}
+                        SELECT al.asset_id as asset_id, al.labels
+                        FROM asset_labels AS al
+                        WHERE al.superseded_by = {}
+                        UNION
+                        SELECT awl.asset_id as asset_id, ARRAY_AGG(awl.label) as labels
+                        FROM asset_wx_labels AS awl
+                        GROUP BY awl.asset_id
+                    ) AS data, UNNEST(labels) AS labels_list
+                    GROUP BY asset_id
                 ) AS awl ON awl.asset_id = a.id
                 {}
                 ORDER BY a.block_uid ASC",
@@ -363,14 +369,17 @@ fn generate_assets_user_defined_data_base_sql_query() -> String {
         FROM assets a
         LEFT JOIN predefined_verifications pv ON a.id = pv.asset_id
         LEFT JOIN (
-            SELECT COALESCE(awl.asset_id, al.asset_id) AS asset_id, ARRAY(SELECT DISTINCT labels FROM UNNEST(awl.labels || al.labels) AS labels) AS labels
+            SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
             FROM (
-                SELECT asset_id, ARRAY_AGG(label) as labels 
-                FROM asset_wx_labels 
-                GROUP BY asset_id
-            ) AS awl 
-            RIGHT JOIN asset_labels AS al ON awl.asset_id = al.asset_id 
-            WHERE al.superseded_by = {} 
+                SELECT al.asset_id as asset_id, al.labels
+                FROM asset_labels AS al
+                WHERE al.superseded_by = {}
+                UNION
+                SELECT awl.asset_id as asset_id, ARRAY_AGG(awl.label) as labels
+                FROM asset_wx_labels AS awl
+                GROUP BY awl.asset_id
+            ) AS data, UNNEST(labels) AS labels_list
+            GROUP BY asset_id
         ) AS awl ON awl.asset_id = a.id
     ", MAX_UID)
 }
