@@ -13,7 +13,7 @@ use super::InvalidateCacheQueryParams;
 use crate::api::{dtos::ResponseFormat, models::Asset};
 use crate::cache::{self, AssetBlockchainData, AssetUserDefinedData, InvalidateCacheMode};
 use crate::error;
-use crate::models::{AssetLabel, VerificationStatus};
+use crate::models::VerificationStatus;
 use crate::services;
 use crate::services::assets::GetOptions;
 
@@ -369,8 +369,6 @@ async fn asset_add_label_controller(
 ) -> Result<Asset, Rejection> {
     debug!("asset_add_label_controller"; "asset_id" => &asset_id, "label" => &label);
 
-    let label = AssetLabel::try_from(label.as_str())?;
-
     admin_assets_service.add_label(&asset_id, &label).await?;
 
     let maybe_asset_info = assets_service
@@ -394,8 +392,6 @@ async fn asset_delete_label_controller(
     admin_assets_service: Arc<impl services::admin_assets::Service>,
 ) -> Result<Asset, Rejection> {
     debug!("asset_delete_label_controller"; "asset_id" => &asset_id, "label" => &label);
-
-    let label = AssetLabel::try_from(label.as_str())?;
 
     admin_assets_service.delete_label(&asset_id, &label).await?;
 

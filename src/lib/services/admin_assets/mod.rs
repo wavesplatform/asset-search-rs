@@ -1,13 +1,12 @@
 pub mod repo;
 
 use std::collections::HashSet;
-use std::convert::TryFrom;
 use std::sync::Arc;
 
 use crate::cache::{AssetUserDefinedData, AsyncWriteCache};
-use crate::db::enums::{AssetWxLabelValueType, VerificationStatusValueType};
+use crate::db::enums::VerificationStatusValueType;
 use crate::error::Error as AppError;
-use crate::models::{AssetLabel, VerificationStatus};
+use crate::models::VerificationStatus;
 
 #[async_trait::async_trait]
 pub trait Service {
@@ -19,9 +18,9 @@ pub trait Service {
 
     async fn update_ticker(&self, id: &str, ticker: Option<&str>) -> Result<(), AppError>;
 
-    async fn add_label(&self, id: &str, label: &AssetLabel) -> Result<(), AppError>;
+    async fn add_label(&self, id: &str, label: &str) -> Result<(), AppError>;
 
-    async fn delete_label(&self, id: &str, label: &AssetLabel) -> Result<(), AppError>;
+    async fn delete_label(&self, id: &str, label: &str) -> Result<(), AppError>;
 }
 
 pub struct AdminAssetsService {
@@ -123,12 +122,10 @@ impl Service for AdminAssetsService {
         }
     }
 
-    async fn add_label(&self, id: &str, label: &AssetLabel) -> Result<(), AppError> {
-        let l = AssetWxLabelValueType::try_from(label)?;
-
+    async fn add_label(&self, id: &str, label: &str) -> Result<(), AppError> {
         if self
             .repo
-            .add_label(id, &l)
+            .add_label(id, label)
             .map_err(|err| AppError::DbError(err.to_string()))?
         {
             let asset_id = id.to_owned();
@@ -140,10 +137,8 @@ impl Service for AdminAssetsService {
                 .await
                 .map_err(|e| AppError::CacheError(format!("{}", e)))?
             {
-                let mut labels: HashSet<AssetLabel> = cached_data
-                    .labels
-                    .into_iter()
-                    .collect::<HashSet<AssetLabel>>();
+                let mut labels: HashSet<String> =
+                    cached_data.labels.into_iter().collect::<HashSet<String>>();
                 labels.insert(label);
 
                 AssetUserDefinedData {
@@ -171,12 +166,10 @@ impl Service for AdminAssetsService {
         }
     }
 
-    async fn delete_label(&self, id: &str, label: &AssetLabel) -> Result<(), AppError> {
-        let l = AssetWxLabelValueType::try_from(label)?;
-
+    async fn delete_label(&self, id: &str, label: &str) -> Result<(), AppError> {
         if self
             .repo
-            .delete_label(id, &l)
+            .delete_label(id, label)
             .map_err(|err| AppError::DbError(err.to_string()))?
         {
             let asset_id = id.to_owned();

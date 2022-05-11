@@ -3,16 +3,12 @@ use diesel::sql_types::{Array, BigInt, Integer, Text};
 use diesel::{prelude::*, sql_query};
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use std::convert::TryFrom;
 use wavesexchange_log::error;
 
 use super::{Asset, AssetId, FindParams, OracleDataEntry, Repo, TickerFilter, UserDefinedData};
-use crate::db::enums::{
-    AssetWxLabelValueType, DataEntryValueTypeMapping, VerificationStatusValueType,
-};
+use crate::db::enums::{DataEntryValueTypeMapping, VerificationStatusValueType};
 use crate::db::PgPool;
 use crate::error::Error as AppError;
-use crate::models::AssetLabel;
 use crate::schema::data_entries;
 
 const MAX_UID: i64 = i64::MAX - 1;
@@ -51,7 +47,7 @@ impl PgRepo {
 }
 
 impl Repo for PgRepo {
-    fn find(&self, params: FindParams, oracle_address: &str) -> Result<Vec<AssetId>, AppError> {
+    fn find(&self, params: FindParams) -> Result<Vec<AssetId>, AppError> {
         // conditions have to be collected before assets_cte_query construction
         // because of difference in searching by text and searching by ticker
         let mut conditions = vec![];
@@ -82,21 +78,17 @@ impl Repo for PgRepo {
         if let Some(asset_labels) = params.asset_label_in {
             let mut label_filters = vec![];
 
-            if asset_labels.contains(&AssetLabel::WithoutLabels) {
-                label_filters.push(format!("awl.label IS NULL"));
+            if asset_labels.contains(&"null".to_string()) {
+                label_filters.push(format!("awl.labels IS NULL"));
             }
-
-            let asset_labels = asset_labels
-                .iter()
-                // AssetLabel::WithoutLabels has not matching value in AssetWxLabelValueType
-                .filter(|al| **al != AssetLabel::WithoutLabels)
-                .map(|al| AssetWxLabelValueType::try_from(al))
-                .collect::<Result<Vec<_>, AppError>>()?;
 
             if asset_labels.len() > 0 {
                 let labels_filter = format!(
-                    "awl.label = ANY(ARRAY[{}]::asset_wx_label_value_type[])",
-                    asset_labels.iter().join(",")
+                    "awl.labels && ARRAY[{}]",
+                    asset_labels
+                        .iter()
+                        .map(|label| format!("'{}'", label))
+                        .join(",")
                 );
                 label_filters.push(labels_filter);
             }
@@ -166,13 +158,23 @@ impl Repo for PgRepo {
                     ({}) AS search
                 LEFT JOIN assets AS a ON a.id = search.id AND a.superseded_by = {}
                 LEFT JOIN predefined_verifications AS pv ON pv.asset_id = search.id
-                LEFT JOIN (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id, {} FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS awl ON awl.asset_id = search.id
+                LEFT JOIN (
+                    SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
+                    FROM (
+                        SELECT al.asset_id as asset_id, al.labels
+                        FROM asset_labels AS al
+                        WHERE al.superseded_by = {}
+                        UNION
+                        SELECT awl.asset_id as asset_id, ARRAY_AGG(awl.label) as labels
+                        FROM asset_wx_labels AS awl
+                        GROUP BY awl.asset_id
+                    ) AS data, UNNEST(labels) AS labels_list
+                    GROUP BY asset_id
+                ) AS awl ON awl.asset_id = search.id
                 {}
                 ORDER BY search.id ASC, search.rank DESC",
                 search_query,
                 MAX_UID,
-                AssetWxLabelValueType::CommunityVerified,
-                oracle_address,
                 MAX_UID,
                 conditions
             )
@@ -203,13 +205,23 @@ impl Repo for PgRepo {
                 FROM
                     (SELECT a.id, a.smart, (SELECT min(a1.block_uid) FROM assets a1 WHERE a1.id = a.id) AS block_uid, a.issuer FROM assets AS a WHERE a.superseded_by = {} AND a.nft = {}) AS a
                 LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id
-                LEFT JOIN (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id, {} FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS awl ON awl.asset_id = a.id
+                LEFT JOIN (
+                    SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
+                    FROM (
+                        SELECT al.asset_id as asset_id, al.labels
+                        FROM asset_labels AS al
+                        WHERE al.superseded_by = {}
+                        UNION
+                        SELECT awl.asset_id as asset_id, ARRAY_AGG(awl.label) as labels
+                        FROM asset_wx_labels AS awl
+                        GROUP BY awl.asset_id
+                    ) AS data, UNNEST(labels) AS labels_list
+                    GROUP BY asset_id
+                ) AS awl ON awl.asset_id = a.id
                 {}
                 ORDER BY a.block_uid ASC",
                 MAX_UID,
                 false,
-                AssetWxLabelValueType::CommunityVerified,
-                oracle_address,
                 MAX_UID,
                 conditions
             )
@@ -303,14 +315,10 @@ impl Repo for PgRepo {
         })
     }
 
-    fn get_asset_user_defined_data(
-        &self,
-        asset_id: &str,
-        oracle_address: &str,
-    ) -> Result<UserDefinedData, AppError> {
+    fn get_asset_user_defined_data(&self, asset_id: &str) -> Result<UserDefinedData, AppError> {
         let q = sql_query(&format!(
             "{} WHERE a.id = $1 AND a.superseded_by = $2 LIMIT 1",
-            generate_assets_user_defined_data_base_sql_query(oracle_address)
+            generate_assets_user_defined_data_base_sql_query()
         ))
         .bind::<Text, _>(asset_id)
         .bind::<BigInt, _>(MAX_UID);
@@ -324,11 +332,10 @@ impl Repo for PgRepo {
     fn mget_asset_user_defined_data(
         &self,
         asset_ids: &[&str],
-        oracle_address: &str,
     ) -> Result<Vec<UserDefinedData>, AppError> {
         let q = sql_query(&format!(
             "{} WHERE a.id = ANY(ARRAY[$1]) AND a.superseded_by = $2",
-            generate_assets_user_defined_data_base_sql_query(oracle_address)
+            generate_assets_user_defined_data_base_sql_query()
         ))
         .bind::<Array<Text>, _>(asset_ids)
         .bind::<BigInt, _>(MAX_UID);
@@ -339,13 +346,10 @@ impl Repo for PgRepo {
         })
     }
 
-    fn all_assets_user_defined_data(
-        &self,
-        oracle_address: &str,
-    ) -> Result<Vec<UserDefinedData>, AppError> {
+    fn all_assets_user_defined_data(&self) -> Result<Vec<UserDefinedData>, AppError> {
         let q = sql_query(&format!(
             "{} WHERE a.superseded_by = $1",
-            generate_assets_user_defined_data_base_sql_query(oracle_address)
+            generate_assets_user_defined_data_base_sql_query()
         ))
         .bind::<BigInt, _>(MAX_UID);
 
@@ -356,16 +360,28 @@ impl Repo for PgRepo {
     }
 }
 
-fn generate_assets_user_defined_data_base_sql_query(oracle_address: &str) -> String {
+fn generate_assets_user_defined_data_base_sql_query() -> String {
     format!("SELECT 
         a.id as asset_id,
         pv.ticker,
         COALESCE(pv.verification_status, 'unknown'::verification_status_value_type) AS verification_status,
-        COALESCE(awl.labels, ARRAY[]::asset_wx_label_value_type[])  AS labels
+        COALESCE(awl.labels, ARRAY[]::text[])  AS labels
         FROM assets a
         LEFT JOIN predefined_verifications pv ON a.id = pv.asset_id
-        LEFT JOIN (SELECT asset_id, ARRAY_AGG(label) as labels FROM (SELECT asset_id, label FROM asset_wx_labels UNION SELECT related_asset_id AS asset_id, {} AS label FROM data_entries WHERE address = '{}' AND key = 'status_<' || related_asset_id || '>' AND int_val = 2 AND related_asset_id IS NOT NULL AND superseded_by = {}) AS l GROUP BY asset_id) AS awl ON awl.asset_id = a.id
-    ", AssetWxLabelValueType::CommunityVerified, oracle_address, MAX_UID)
+        LEFT JOIN (
+            SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
+            FROM (
+                SELECT al.asset_id as asset_id, al.labels
+                FROM asset_labels AS al
+                WHERE al.superseded_by = {}
+                UNION
+                SELECT awl.asset_id as asset_id, ARRAY_AGG(awl.label) as labels
+                FROM asset_wx_labels AS awl
+                GROUP BY awl.asset_id
+            ) AS data, UNNEST(labels) AS labels_list
+            GROUP BY asset_id
+        ) AS awl ON awl.asset_id = a.id
+    ", MAX_UID)
 }
 
 mod utils {

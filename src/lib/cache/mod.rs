@@ -44,36 +44,35 @@ pub trait AsyncWriteCache<T>: AsyncReadCache<T> {
 #[cfg(test)]
 mod tests {
     use super::AssetUserDefinedData;
-    use crate::models::AssetLabel;
 
     #[test]
     fn should_add_label() {
         let udd = AssetUserDefinedData::new("asset_id");
-        let udd_with_new_label = udd.add_label(&AssetLabel::WaVerified);
-        assert_eq!(udd_with_new_label.labels, vec![AssetLabel::WaVerified]);
+        let udd_with_new_label = udd.add_label("WA_VERIFIED");
+        assert_eq!(udd_with_new_label.labels, vec!["WA_VERIFIED"]);
     }
 
     #[test]
     fn should_add_label_exactly_once() {
         let udd = AssetUserDefinedData::new("asset_id");
-        let udd_with_new_label = udd.add_label(&AssetLabel::WaVerified);
-        let udd_with_new_label = udd_with_new_label.add_label(&AssetLabel::WaVerified);
-        assert_eq!(udd_with_new_label.labels, vec![AssetLabel::WaVerified]);
+        let udd_with_new_label = udd.add_label("WA_VERIFIED");
+        let udd_with_new_label = udd_with_new_label.add_label("WA_VERIFIED");
+        assert_eq!(udd_with_new_label.labels, vec!["WA_VERIFIED"]);
     }
 
     #[test]
     fn should_delete_label() {
         let udd = AssetUserDefinedData::new("asset_id");
-        let udd_with_new_label = udd.delete_label(&AssetLabel::WaVerified);
-        assert_eq!(udd_with_new_label.labels, vec![]);
+        let udd_with_new_label = udd.delete_label("WA_VERIFIED");
+        assert_eq!(udd_with_new_label.labels, Vec::<String>::new());
     }
 
     #[test]
     fn should_delete_label_exactly_once() {
         let udd = AssetUserDefinedData::new("asset_id");
-        let udd_with_new_label = udd.delete_label(&AssetLabel::WaVerified);
+        let udd_with_new_label = udd.delete_label("WA_VERIFIED");
         // should not fail while deleting non-existing label
-        udd_with_new_label.delete_label(&AssetLabel::WaVerified);
-        assert_eq!(udd_with_new_label.labels, vec![]);
+        udd_with_new_label.delete_label("WA_VERIFIED");
+        assert_eq!(udd_with_new_label.labels, Vec::<String>::new());
     }
 }

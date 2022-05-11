@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 
 use crate::consumer::models::data_entry::DataEntryValue;
-use crate::models::{AssetLabel, DataEntryType, VerificationStatus};
+use crate::models::{DataEntryType, VerificationStatus};
 use crate::schema::{asset_wx_labels, assets, predefined_verifications};
 use crate::waves::{parse_waves_association_key, KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES};
 
@@ -61,64 +61,16 @@ pub struct BriefAssetInfo {
 #[derive(Clone, Debug, Serialize)]
 pub struct AssetMetadata {
     pub oracle_data: Vec<OracleData>,
-    pub labels: Vec<AssetLabel>,
+    pub labels: Vec<String>,
     pub sponsor_balance: Option<i64>,
     pub has_image: bool,
     pub verified_status: VerificationStatus,
 }
 
-impl diesel::expression::Expression for AssetLabel {
-    type SqlType = diesel::sql_types::Text;
-}
-
-impl
-    diesel::expression::AppearsOnTable<
-        JoinOn<
-            diesel::query_source::joins::Join<
-                JoinOn<
-                    diesel::query_source::joins::Join<
-                        assets::table,
-                        predefined_verifications::table,
-                        LeftOuter,
-                    >,
-                    diesel::expression::operators::Eq<
-                        predefined_verifications::columns::asset_id,
-                        assets::columns::id,
-                    >,
-                >,
-                asset_wx_labels::table,
-                LeftOuter,
-            >,
-            diesel::expression::operators::Eq<
-                asset_wx_labels::columns::asset_id,
-                assets::columns::id,
-            >,
-        >,
-    > for AssetLabel
-{
-}
-
-impl diesel::query_builder::QueryFragment<diesel::pg::Pg> for AssetLabel {
-    fn walk_ast(
-        &self,
-        mut out: diesel::query_builder::AstPass<diesel::pg::Pg>,
-    ) -> diesel::QueryResult<()> {
-        let v = match self.clone() {
-            AssetLabel::CommunityVerified => Some("COMMUNITY_VERIFIED"),
-            AssetLabel::DeFi => Some("DEFI"),
-            AssetLabel::Gateway => Some("GATEWAY"),
-            AssetLabel::Stablecoin => Some("STABLECOIN"),
-            AssetLabel::Qualified => Some("QUALIFIED"),
-            AssetLabel::WaVerified => Some("WA_VERIFIED"),
-            _ => None,
-        };
-
-        if let Some(v) = v {
-            out.push_bind_param::<diesel::sql_types::Text, _>(&v)?;
-        }
-
-        Ok(())
-    }
+#[derive(Clone, Debug)]
+pub struct AssetLabel {
+    pub asset_id: String,
+    pub label: String,
 }
 
 impl diesel::expression::Expression for VerificationStatus {
