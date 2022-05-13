@@ -1,12 +1,11 @@
 use chrono::{DateTime, Utc};
-use diesel::expression::NonAggregate;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::Display;
 
-use crate::db::enums::{AssetWxLabelValueType, DataEntryValueType, VerificationStatusValueType};
+use crate::db::enums::{DataEntryValueType, VerificationStatusValueType};
 use crate::error::Error as AppError;
 use crate::waves::{WAVES_ID, WAVES_NAME, WAVES_PRECISION};
 
@@ -36,7 +35,7 @@ pub struct Asset {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AssetMetadata {
     pub verification_status: VerificationStatus,
-    pub labels: Vec<AssetLabel>,
+    pub labels: Vec<String>,
     pub sponsor_balance: Option<AssetSponsorBalance>,
     pub oracles_data: HashMap<String, Vec<AssetOracleDataEntry>>,
 }
@@ -164,97 +163,13 @@ impl Default for VerificationStatus {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum AssetLabel {
-    Gateway,
-    #[serde(rename = "DEFI")]
-    DeFi,
-    Stablecoin,
-    Qualified,
-    WaVerified,
-    CommunityVerified,
-    #[serde(rename = "null")]
-    WithoutLabels,
-}
-
-impl From<&AssetWxLabelValueType> for AssetLabel {
-    fn from(v: &AssetWxLabelValueType) -> Self {
-        match v {
-            AssetWxLabelValueType::DeFi => Self::DeFi,
-            AssetWxLabelValueType::Gateway => Self::Gateway,
-            AssetWxLabelValueType::Stablecoin => Self::Stablecoin,
-            AssetWxLabelValueType::Qualified => Self::Qualified,
-            AssetWxLabelValueType::WaVerified => Self::WaVerified,
-            AssetWxLabelValueType::CommunityVerified => Self::CommunityVerified,
-        }
-    }
-}
-
-impl TryFrom<&AssetLabel> for AssetWxLabelValueType {
-    type Error = AppError;
-
-    fn try_from(v: &AssetLabel) -> Result<Self, Self::Error> {
-        match v {
-            AssetLabel::DeFi => Ok(Self::DeFi),
-            AssetLabel::Gateway => Ok(Self::Gateway),
-            AssetLabel::Stablecoin => Ok(Self::Stablecoin),
-            AssetLabel::Qualified => Ok(Self::Qualified),
-            AssetLabel::WaVerified => Ok(Self::WaVerified),
-            AssetLabel::CommunityVerified => Ok(Self::CommunityVerified),
-            _ => Err(AppError::ValidationError(
-                format!(
-                    "Error occurred while parsing AssetWxLabelValueType from AssetLabel {}",
-                    v
-                ),
-                None,
-            )),
-        }
-    }
-}
-
-impl TryFrom<&str> for AssetLabel {
-    type Error = AppError;
-
-    fn try_from(v: &str) -> Result<Self, Self::Error> {
-        match v {
-            "GATEWAY" => Ok(Self::Gateway),
-            "DEFI" => Ok(Self::DeFi),
-            "STABLECOIN" => Ok(Self::Stablecoin),
-            "QUALIFIED" => Ok(Self::Qualified),
-            "WA_VERIFIED" => Ok(Self::WaVerified),
-            "COMMUNITY_VERIFIED" => Ok(Self::CommunityVerified),
-            "null" => Ok(Self::WithoutLabels),
-            _ => Err(AppError::InvalidVariant(format!(
-                "Error occurred while parsing AssetLabel from {}",
-                v
-            ))),
-        }
-    }
-}
-
-impl Display for AssetLabel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AssetLabel::Gateway
-            | AssetLabel::DeFi
-            | AssetLabel::Stablecoin
-            | AssetLabel::Qualified
-            | AssetLabel::WaVerified
-            | AssetLabel::CommunityVerified => f.write_str(&self.to_string()),
-            AssetLabel::WithoutLabels => Ok(()),
-        }
-    }
-}
-
-impl NonAggregate for AssetLabel {}
-
 #[derive(Clone, Debug)]
 pub enum AssetInfoUpdate {
     Base(BaseAssetInfoUpdate),
     SponsorRegularBalance(i64),
     SponsorOutLeasing(i64),
     OraclesData(HashMap<String, Vec<AssetOracleDataEntry>>),
+    Labels(Vec<String>),
 }
 
 #[derive(Clone, Debug)]

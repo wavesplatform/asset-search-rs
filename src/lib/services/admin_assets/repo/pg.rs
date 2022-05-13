@@ -1,7 +1,7 @@
 use diesel::prelude::*;
 
 use super::Repo;
-use crate::db::enums::{AssetWxLabelValueType, VerificationStatusValueType};
+use crate::db::enums::VerificationStatusValueType;
 use crate::db::PgPool;
 use crate::error::Error as AppError;
 use crate::schema::{asset_wx_labels, predefined_verifications};
@@ -52,7 +52,7 @@ impl Repo for PgRepo {
         })
     }
 
-    fn add_label(&self, id: &str, label: &AssetWxLabelValueType) -> anyhow::Result<bool> {
+    fn add_label(&self, id: &str, label: &str) -> anyhow::Result<bool> {
         diesel::insert_into(asset_wx_labels::table)
             .values((
                 asset_wx_labels::asset_id.eq(id),
@@ -67,7 +67,7 @@ impl Repo for PgRepo {
             })
     }
 
-    fn delete_label(&self, id: &str, label: &AssetWxLabelValueType) -> anyhow::Result<bool> {
+    fn delete_label(&self, id: &str, label: &str) -> anyhow::Result<bool> {
         diesel::delete(
             asset_wx_labels::table
                 .filter(asset_wx_labels::asset_id.eq(id))

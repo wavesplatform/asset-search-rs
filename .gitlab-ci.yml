@@ -14,8 +14,8 @@ variables:
   # CHART_LIST overrides the names of helm charts which are used in agrocd. If empty, then is equal to APP_NAME
   CHART_LIST: "asset-search asset-search-admin asset-search-consumer"
   DB_NAME: asset_search
-  MIGRATION_UP_CMD: /usr/www/app/migration up
-  MIGRATION_DOWN_CMD: /usr/www/app/migration down
+  MIGRATION_UP_CMD: /app/migration up
+  MIGRATION_DOWN_CMD: /app/migration down
 
 stages:
   - "Build docker image"

@@ -2,6 +2,7 @@ pub mod admin;
 pub mod api;
 pub mod app;
 pub mod consumer;
+pub mod migration;
 pub mod postgres;
 pub mod redis;
 
@@ -31,10 +32,6 @@ pub struct ConsumerConfig {
     pub redis: redis::Config,
 }
 
-#[derive(Debug, Clone)]
-pub struct MigrationConfig {
-    pub postgres: postgres::Config,
-}
 #[derive(Debug, Clone)]
 pub struct InvalidateCacheConfig {
     pub app: app::Config,
@@ -96,10 +93,6 @@ pub async fn load_invalidate_cache_config() -> Result<InvalidateCacheConfig, Err
     })
 }
 
-pub fn load_migration_config() -> Result<MigrationConfig, Error> {
-    let postgres_config = postgres::load()?;
-
-    Ok(MigrationConfig {
-        postgres: postgres_config,
-    })
+pub fn load_migration_config() -> Result<migration::Config, Error> {
+    migration::load()
 }

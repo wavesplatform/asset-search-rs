@@ -5,6 +5,7 @@ pub mod updates;
 use anyhow::{Error, Result};
 use bigdecimal::ToPrimitive;
 use chrono::{DateTime, Duration, NaiveDateTime, Utc};
+use fragstrings::frag_parse;
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
@@ -21,6 +22,7 @@ use waves_protobuf_schemas::waves::{
 use wavesexchange_log::{debug, info, timer};
 
 use self::models::asset::{AssetOverride, DeletedAsset, InsertableAsset};
+use self::models::asset_labels::{AssetLabelsOverride, DeletedAssetLabels, InsertableAssetLabels};
 use self::models::block_microblock::BlockMicroblock;
 use self::models::data_entry::{
     DataEntryOverride, DataEntryUpdate, DataEntryValue, DeletedDataEntry, InsertableDataEntry,
@@ -34,15 +36,11 @@ use self::models::out_leasing::{
 use crate::cache::{AssetBlockchainData, AssetUserDefinedData, SyncReadCache, SyncWriteCache};
 use crate::db::enums::DataEntryValueType;
 use crate::error::Error as AppError;
-use crate::models::{
-    AssetInfoUpdate, AssetLabel, AssetOracleDataEntry, BaseAssetInfoUpdate, DataEntryType,
-};
+use crate::models::{AssetInfoUpdate, AssetOracleDataEntry, BaseAssetInfoUpdate, DataEntryType};
 use crate::waves::{
     get_asset_id, is_waves_asset_id, parse_waves_association_key, Address,
     KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES, WAVES_ID,
 };
-
-const ASSET_ORACLE_VERIFICATION_STATUS_VERIFIED: i64 = 2;
 
 #[derive(Clone, Debug)]
 pub enum BlockchainUpdate {
@@ -89,9 +87,15 @@ enum UpdatesItem {
 }
 
 #[derive(Debug)]
-enum AssetLabelUpdate {
-    SetLabel(AssetLabel),
-    DeleteLabel(AssetLabel),
+pub struct AssetLabelsUpdate {
+    pub asset_id: String,
+    pub labels: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+pub enum AssetLabelUpdate {
+    SetLabel(String),
+    DeleteLabel(String),
 }
 
 #[async_trait::async_trait]
@@ -297,6 +301,7 @@ where
 
     let block_uids_with_appends = block_uids.into_iter().zip(appends).collect_vec();
 
+    // Handle base asset info updates
     let base_asset_info_updates_with_block_uids = {
         timer!("assets updates handling");
 
@@ -321,6 +326,7 @@ where
         base_asset_info_updates_with_block_uids
     };
 
+    // Handle data entries updates
     let data_entries_updates_with_block_uids = {
         timer!("data entries updates handling");
 
@@ -332,7 +338,7 @@ where
                         .txs
                         .iter()
                         .flat_map(|tx| {
-                            extract_data_entries_updates(
+                            extract_asset_related_data_entries_updates(
                                 append.height as i32,
                                 tx,
                                 waves_association_address,
@@ -343,7 +349,10 @@ where
                 })
                 .collect();
 
-        handle_data_entries_updates(repo.clone(), &data_entries_updates_with_block_uids)?;
+        handle_asset_related_data_entries_updates(
+            repo.clone(),
+            &data_entries_updates_with_block_uids,
+        )?;
 
         info!(
             "handled {} data entries updates",
@@ -353,6 +362,40 @@ where
         data_entries_updates_with_block_uids
     };
 
+    // Handle asset labels updates
+    let asset_labels_updates_with_block_uids = {
+        timer!("asset label updates handling");
+
+        let asset_labels_updates_with_block_uids: Vec<(&i64, AssetLabelsUpdate)> =
+            block_uids_with_appends
+                .iter()
+                .flat_map(|(block_uid, append)| {
+                    append
+                        .txs
+                        .iter()
+                        .flat_map(|tx| {
+                            extract_asset_labels_updates(
+                                append.height as i32,
+                                tx,
+                                waves_association_address,
+                            )
+                        })
+                        .map(|u| (block_uid, u))
+                        .collect_vec()
+                })
+                .collect();
+
+        handle_asset_labels_updates(repo.clone(), &asset_labels_updates_with_block_uids)?;
+
+        info!(
+            "handled {} asset label updates",
+            asset_labels_updates_with_block_uids.len()
+        );
+
+        asset_labels_updates_with_block_uids
+    };
+
+    // Handle issuer balances updates
     let issuer_balances_updates_with_block_uids = {
         timer!("issuer balances updates handling");
 
@@ -393,6 +436,7 @@ where
         issuer_balances_updates_with_block_uids
     };
 
+    // Handle out leasing updates
     let out_leasing_updates_with_block_uids = {
         timer!("out leasing updates handling");
 
@@ -417,6 +461,17 @@ where
         out_leasing_updates_with_block_uids
     };
 
+    // Invalidate assets cache
+    // 1. Collect asset info updates grouped by asset id
+    // 2. Extract asset info updates from asset labels updates
+    // 3. Extract asset info updates from data entries updates
+    // 4. Extract asset info updates from issuer balances updates
+    // 5. Extract asset info updates from out leasing updates
+    // 6. Merge updates
+    // 7. Get currently cached assets data
+    // 8. Invalidate cache
+
+    // 1.
     let assets_info_updates = base_asset_info_updates_with_block_uids
         .iter()
         .fold(
@@ -439,23 +494,30 @@ where
         .map(|(asset_id, update)| (asset_id, AssetInfoUpdate::Base(update)))
         .collect::<HashMap<String, AssetInfoUpdate>>();
 
-    let assets_info_updates_by_data_entries = asset_info_updates_from_data_entries_updates(
-        repo.clone(),
-        &data_entries_updates_with_block_uids,
-    )?;
+    // 2.
+    let assets_info_updates_by_asset_labels =
+        asset_info_updates_from_asset_labels_update(&asset_labels_updates_with_block_uids)?;
 
+    // 3.
+    let assets_info_updates_by_data_entries =
+        asset_info_updates_from_data_entries_updates(&data_entries_updates_with_block_uids)?;
+
+    // 4.
     let assets_info_updates_by_issuer_balances = asset_info_updates_from_issuer_balances_updates(
         repo.clone(),
         &issuer_balances_updates_with_block_uids,
     )?;
 
+    // 5.
     let assets_info_updates_by_out_leasing = asset_info_updates_from_out_leasing_updates(
         repo.clone(),
         &out_leasing_updates_with_block_uids,
     )?;
 
+    // 6.
     let assets_info_updates = assets_info_updates
         .into_iter()
+        .chain(assets_info_updates_by_asset_labels.into_iter())
         .chain(assets_info_updates_by_data_entries.into_iter())
         .chain(assets_info_updates_by_issuer_balances.into_iter())
         .chain(assets_info_updates_by_out_leasing.into_iter())
@@ -474,6 +536,7 @@ where
             },
         );
 
+    // 7.
     let assets_info_updates_ids = assets_info_updates
         .keys()
         .map(|s| s.as_str())
@@ -503,6 +566,7 @@ where
             },
         );
 
+    // 8.
     assets_info_updates
         .iter()
         .try_for_each::<_, Result<(), AppError>>(|(asset_id, asset_info_updates)| {
@@ -510,6 +574,7 @@ where
                 "invalidate cache for asset_id {}, asset_info_updates: {:?}",
                 asset_id, asset_info_updates
             );
+            // Invalidate cached blockchain data
             match cached_blockhain_data
                 .get(asset_id.as_str())
                 .and_then(|o| o.as_ref())
@@ -526,16 +591,16 @@ where
                 }
             }
 
-            let asset_label_update = asset_info_updates
+            let asset_labels_update = asset_info_updates
                 .iter()
                 .filter_map(|au| match au {
-                    AssetInfoUpdate::OraclesData(oracles_data) => Some(oracles_data),
+                    AssetInfoUpdate::Labels(labels) => Some(labels),
                     _ => None,
                 })
-                .last()
-                .and_then(|oracles_data| extract_asset_label_update(oracles_data));
+                .last();
 
-            if let Some(asset_label_update) = asset_label_update {
+            // Invalidate cached user defined data
+            if let Some(asset_labels_update) = asset_labels_update {
                 let current_asset_user_defined_data = match cached_user_defined_data
                     .get(asset_id.as_str())
                     .and_then(|o| o.clone())
@@ -549,14 +614,34 @@ where
                     },
                 };
 
-                let new_asset_user_defined_data = match asset_label_update {
-                    AssetLabelUpdate::SetLabel(label) => {
-                        current_asset_user_defined_data.add_label(&label)
-                    }
-                    AssetLabelUpdate::DeleteLabel(label) => {
-                        current_asset_user_defined_data.delete_label(&label)
-                    }
-                };
+                let asset_labels_update = asset_labels_update
+                    .clone()
+                    .into_iter()
+                    .collect::<HashSet<String>>();
+
+                let current_asset_labels = current_asset_user_defined_data
+                    .labels
+                    .clone()
+                    .into_iter()
+                    .collect::<HashSet<String>>();
+
+                // Labels to add to asset
+                let settings = asset_labels_update
+                    .difference(&current_asset_labels)
+                    .map(|label| AssetLabelUpdate::SetLabel(label.to_owned()));
+
+                // Labels to delete from asset
+                let deletings = current_asset_labels
+                    .difference(&asset_labels_update)
+                    .map(|label| AssetLabelUpdate::DeleteLabel(label.to_owned()));
+
+                let new_asset_user_defined_data = settings.chain(deletings).fold(
+                    current_asset_user_defined_data,
+                    |acc, update| match update {
+                        AssetLabelUpdate::SetLabel(label) => acc.add_label(&label),
+                        AssetLabelUpdate::DeleteLabel(label) => acc.delete_label(&label),
+                    },
+                );
 
                 user_defined_data_cache.set(&asset_id, new_asset_user_defined_data)?;
             }
@@ -749,7 +834,7 @@ fn handle_base_asset_info_updates<R: repo::Repo>(
     repo.set_assets_next_update_uid(assets_next_uid + updates_count as i64)
 }
 
-fn extract_data_entries_updates(
+fn extract_asset_related_data_entries_updates(
     height: i32,
     tx: &Tx,
     waves_association_address: &str,
@@ -800,7 +885,7 @@ fn extract_data_entries_updates(
         .collect_vec()
 }
 
-fn handle_data_entries_updates<R: repo::Repo>(
+fn handle_asset_related_data_entries_updates<R: repo::Repo>(
     repo: Arc<R>,
     updates: &[(&i64, DataEntryUpdate)],
 ) -> Result<()> {
@@ -924,6 +1009,137 @@ fn handle_data_entries_updates<R: repo::Repo>(
     repo.insert_data_entries(data_entries_with_uids_superseded_by)?;
 
     repo.set_data_entries_next_update_uid(data_entries_next_uid + updates_count as i64)
+}
+
+// https://confluence.wavesplatform.com/display/DEXPRODUCTS/WX+Governance#WXGovernance-%D0%9B%D0%B5%D0%B9%D0%B1%D0%BB%D1%8B%D0%B0%D1%81%D1%81%D0%B5%D1%82%D0%B0
+fn extract_asset_labels_updates(
+    _height: i32,
+    tx: &Tx,
+    waves_association_address: &str,
+) -> Vec<AssetLabelsUpdate> {
+    tx.state_update
+        .data_entries
+        .iter()
+        .filter_map(|data_entry_update| {
+            data_entry_update.data_entry.as_ref().and_then(|de| {
+                let oracle_address = bs58::encode(&data_entry_update.address).into_string();
+                if waves_association_address == &oracle_address
+                    && is_asset_labels_data_entry(&de.key)
+                {
+                    match de.value.as_ref() {
+                        Some(value) => match value {
+                            Value::StringValue(value)
+                                if waves_association_address == &oracle_address =>
+                            {
+                                frag_parse!("%s%s", de.key).map(|(_, asset_id)| {
+                                    let labels = parse_asset_labels(&value);
+                                    AssetLabelsUpdate { asset_id, labels }
+                                })
+                            }
+                            _ => None,
+                        },
+                        // key was deleted -> drop asset labels
+                        None => {
+                            frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetLabelsUpdate {
+                                asset_id,
+                                labels: vec![],
+                            })
+                        }
+                    }
+                } else {
+                    None
+                }
+            })
+        })
+        .collect_vec()
+}
+
+fn handle_asset_labels_updates<R: repo::Repo>(
+    repo: Arc<R>,
+    updates: &[(&i64, AssetLabelsUpdate)],
+) -> Result<()> {
+    if updates.is_empty() {
+        return Ok(());
+    }
+
+    let updates_count = updates.len();
+
+    let asset_labels_next_uid = repo.get_next_asset_labels_uid()?;
+
+    let asset_labels_updates = updates
+        .iter()
+        .enumerate()
+        .map(
+            |(update_idx, (block_uid, labels_update))| InsertableAssetLabels {
+                uid: asset_labels_next_uid + update_idx as i64,
+                superseded_by: -1,
+                block_uid: *block_uid.clone(),
+                asset_id: labels_update.asset_id.clone(),
+                labels: labels_update.labels.clone(),
+            },
+        )
+        .collect_vec();
+
+    let mut asset_labels_grouped: HashMap<InsertableAssetLabels, Vec<InsertableAssetLabels>> =
+        HashMap::new();
+
+    asset_labels_updates.into_iter().for_each(|update| {
+        let group = asset_labels_grouped.entry(update.clone()).or_insert(vec![]);
+        group.push(update);
+    });
+
+    let asset_labels_grouped = asset_labels_grouped.into_iter().collect_vec();
+
+    let asset_labels_grouped_with_uids_superseded_by = asset_labels_grouped
+        .into_iter()
+        .map(|(group_key, group)| {
+            let mut updates = group
+                .into_iter()
+                .sorted_by_key(|item| item.uid)
+                .collect::<Vec<InsertableAssetLabels>>();
+
+            let mut last_uid = std::i64::MAX - 1;
+            (
+                group_key,
+                updates
+                    .as_mut_slice()
+                    .iter_mut()
+                    .rev()
+                    .map(|cur| {
+                        cur.superseded_by = last_uid;
+                        last_uid = cur.uid;
+                        cur.to_owned()
+                    })
+                    .sorted_by_key(|item| item.uid)
+                    .collect(),
+            )
+        })
+        .collect::<Vec<(InsertableAssetLabels, Vec<InsertableAssetLabels>)>>();
+
+    let asset_labels_first_uids: Vec<AssetLabelsOverride> =
+        asset_labels_grouped_with_uids_superseded_by
+            .iter()
+            .map(|(_, group)| {
+                let first = group.iter().next().unwrap().clone();
+                AssetLabelsOverride {
+                    superseded_by: first.uid,
+                    asset_id: first.asset_id,
+                }
+            })
+            .collect();
+
+    repo.close_asset_labels_superseded_by(&asset_labels_first_uids)?;
+
+    let asset_labels_with_uids_superseded_by = &asset_labels_grouped_with_uids_superseded_by
+        .clone()
+        .into_iter()
+        .flat_map(|(_, v)| v)
+        .sorted_by_key(|asset_labels| asset_labels.uid)
+        .collect_vec();
+
+    repo.insert_asset_labels(asset_labels_with_uids_superseded_by)?;
+
+    repo.set_asset_labels_next_update_uid(asset_labels_next_uid + updates_count as i64)
 }
 
 fn extract_issuers_balance_updates(
@@ -1241,6 +1457,8 @@ fn squash_microblocks<R: repo::Repo>(storage: Arc<R>) -> Result<()> {
 
             storage.update_assets_block_references(&key_block_uid)?;
 
+            storage.update_asset_labels_block_references(&key_block_uid)?;
+
             storage.update_data_entries_block_references(&key_block_uid)?;
 
             storage.update_issuer_balances_block_references(&key_block_uid)?;
@@ -1276,6 +1494,8 @@ where
 
     rollback_assets(repo.clone(), block_uid)?;
 
+    rollback_asset_labels(repo.clone(), block_uid)?;
+
     rollback_data_entries(repo.clone(), block_uid)?;
 
     rollback_issuer_balances(repo.clone(), block_uid)?;
@@ -1284,6 +1504,7 @@ where
 
     repo.rollback_blocks_microblocks(&block_uid)?;
 
+    // Invalidate cache
     let assets = repo.mget_assets(&assets_to_rollback)?;
 
     let asset_ids = &assets
@@ -1294,6 +1515,7 @@ where
         })
         .collect::<Vec<_>>();
 
+    // Current assets oracles data
     let assets_oracles_data =
         repo.assets_oracle_data_entries(&asset_ids, waves_association_address)?;
 
@@ -1310,6 +1532,7 @@ where
                 acc
             });
 
+    // Invalidate blockchain data cache
     assets
         .iter()
         .filter_map(|o| match o {
@@ -1338,12 +1561,17 @@ where
         },
     );
 
-    asset_ids.iter().try_for_each(|asset_id| {
-        let asset_label_update = assets_oracles_data
-            .get(asset_id.to_owned())
-            .and_then(|asset_oracles_data| extract_asset_label_update(asset_oracles_data));
+    // Invalidate user defined data cache (rollback asset labels)
+    let assets_labels = repo
+        .mget_asset_labels(asset_ids)?
+        .into_iter()
+        .map(|asset_labels| (asset_labels.asset_id, asset_labels.labels))
+        .collect::<HashMap<String, Vec<String>>>();
 
-        if let Some(asset_label_update) = asset_label_update {
+    asset_ids.iter().try_for_each(|asset_id| {
+        let asset_labels_update = assets_labels.get(asset_id.to_owned());
+
+        if let Some(asset_labels_update) = asset_labels_update {
             let current_asset_user_defined_data = match cached_user_defined_data.get(*asset_id) {
                 Some(cached) => cached.to_owned(),
                 _ => AssetUserDefinedData {
@@ -1354,16 +1582,39 @@ where
                 },
             };
 
-            let new_asset_user_defined_data = match asset_label_update {
-                AssetLabelUpdate::SetLabel(label) => {
-                    current_asset_user_defined_data.add_label(&label)
-                }
-                AssetLabelUpdate::DeleteLabel(label) => {
-                    current_asset_user_defined_data.delete_label(&label)
-                }
-            };
+            let asset_labels_update = asset_labels_update
+                .clone()
+                .into_iter()
+                .collect::<HashSet<String>>();
 
-            user_defined_data_cache.set(&asset_id, new_asset_user_defined_data)
+            let current_asset_labels = current_asset_user_defined_data
+                .labels
+                .clone()
+                .into_iter()
+                .collect::<HashSet<String>>();
+
+            // Labels to add to asset
+            let settings = asset_labels_update
+                .difference(&current_asset_labels)
+                .map(|label| AssetLabelUpdate::SetLabel(label.to_owned()));
+
+            // Labels to delete from asset
+            let deletings = current_asset_labels
+                .difference(&asset_labels_update)
+                .map(|label| AssetLabelUpdate::DeleteLabel(label.to_owned()));
+
+            let rollbacked_asset_user_defined_data =
+                settings
+                    .chain(deletings)
+                    .fold(
+                        current_asset_user_defined_data,
+                        |acc, update| match update {
+                            AssetLabelUpdate::SetLabel(label) => acc.add_label(&label),
+                            AssetLabelUpdate::DeleteLabel(label) => acc.delete_label(&label),
+                        },
+                    );
+
+            user_defined_data_cache.set(&asset_id, rollbacked_asset_user_defined_data)
         } else {
             Ok(())
         }
@@ -1388,6 +1639,24 @@ fn rollback_assets<R: repo::Repo>(repo: Arc<R>, block_uid: i64) -> Result<()> {
         .collect();
 
     repo.reopen_assets_superseded_by(&lowest_deleted_uids)
+}
+
+fn rollback_asset_labels<R: repo::Repo>(repo: Arc<R>, block_uid: i64) -> Result<()> {
+    let deleted = repo.rollback_asset_labels(&block_uid)?;
+
+    let mut grouped_deleted: HashMap<DeletedAssetLabels, Vec<DeletedAssetLabels>> = HashMap::new();
+
+    deleted.into_iter().for_each(|item| {
+        let group = grouped_deleted.entry(item.clone()).or_insert(vec![]);
+        group.push(item);
+    });
+
+    let lowest_deleted_uids: Vec<i64> = grouped_deleted
+        .into_iter()
+        .filter_map(|(_, group)| group.into_iter().min_by_key(|i| i.uid).map(|i| i.uid))
+        .collect();
+
+    repo.reopen_asset_labels_superseded_by(&lowest_deleted_uids)
 }
 
 fn rollback_data_entries<R: repo::Repo>(repo: Arc<R>, block_uid: i64) -> Result<()> {
@@ -1498,44 +1767,35 @@ impl From<&models::data_entry::DataEntryUpdate> for Option<AssetOracleDataEntry>
     }
 }
 
-fn is_asset_label_data_entry(key: &str, asset_id: &str) -> bool {
-    *key == format!("status_<{}>", asset_id)
+fn is_asset_labels_data_entry(key: &str) -> bool {
+    key.starts_with("%s%s__labels__")
 }
 
-/// Extracts AssetLabelUpdate for CommunityVerified
-fn extract_asset_label_update(
-    oracles_data: &HashMap<String, Vec<AssetOracleDataEntry>>,
-) -> Option<AssetLabelUpdate> {
-    oracles_data.iter().fold(None, |_, (_oracle_address, des)| {
-        des.iter().fold(None, |_, de| {
-            if is_asset_label_data_entry(&de.key, &de.asset_id) {
-                match de.int_val {
-                    Some(verification_status) => {
-                        if verification_status == ASSET_ORACLE_VERIFICATION_STATUS_VERIFIED {
-                            // there is update, set new label
-                            Some(AssetLabelUpdate::SetLabel(AssetLabel::CommunityVerified))
-                        } else {
-                            // there is update, unset label
-                            Some(AssetLabelUpdate::DeleteLabel(AssetLabel::CommunityVerified))
-                        }
-                    }
-                    // there is no update
-                    _ => None,
-                }
-            } else {
-                None
-            }
-        })
-    })
+fn parse_asset_labels(value: &str) -> Vec<String> {
+    value.split("__").map(|l| l.to_owned()).collect()
 }
 
-fn asset_info_updates_from_data_entries_updates<R>(
-    _repo: Arc<R>,
+fn asset_info_updates_from_asset_labels_update(
+    updates: &[(&i64, AssetLabelsUpdate)],
+) -> Result<HashMap<String, AssetInfoUpdate>, AppError> {
+    let asset_info_updates =
+        updates
+            .clone()
+            .into_iter()
+            .fold(HashMap::new(), |mut acc, (_, update)| {
+                // set or update asset labels update
+                let asset_info_update = AssetInfoUpdate::Labels(update.labels.clone());
+                acc.insert(update.asset_id.clone(), asset_info_update);
+                acc
+            });
+
+    Ok(asset_info_updates)
+}
+
+fn asset_info_updates_from_data_entries_updates(
     updates: &[(&i64, DataEntryUpdate)],
-) -> Result<HashMap<String, AssetInfoUpdate>, AppError>
-where
-    R: repo::Repo,
-{
+) -> Result<HashMap<String, AssetInfoUpdate>, AppError> {
+    // Group updates by asset id
     let data_entries_updates_by_asset_ids = updates
         .clone()
         .into_iter()
@@ -1549,6 +1809,7 @@ where
 
     let updates_count = data_entries_updates_by_asset_ids.len();
 
+    // Build asset info updates from data entries updates
     let asset_info_updates = data_entries_updates_by_asset_ids
         .into_iter()
         .map(|(related_asset_id, de_updates)| {
@@ -1651,115 +1912,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
-    use crate::{
-        consumer::ASSET_ORACLE_VERIFICATION_STATUS_VERIFIED,
-        models::{AssetLabel, AssetOracleDataEntry, DataEntryType},
-    };
-
-    use super::{
-        escape_unicode_null, extract_asset_label_update, is_asset_label_data_entry,
-        AssetLabelUpdate,
-    };
+    use super::escape_unicode_null;
 
     #[test]
     fn should_escape_unicode_null() {
         assert!("asd\0".contains("\0"));
         assert_eq!(escape_unicode_null("asd\0"), "asd\\0");
-    }
-
-    #[test]
-    fn should_check_asset_label_data_entry() {
-        let asset_id = "asset_id";
-
-        let invalid_key = "asd";
-        assert!(!is_asset_label_data_entry(invalid_key, asset_id));
-
-        let valid_key = format!("status_<{}>", asset_id);
-        assert!(is_asset_label_data_entry(&valid_key, asset_id));
-    }
-
-    #[test]
-    fn should_extract_asset_label_update() {
-        let asset_id = "asset_id".to_owned();
-        let oracle_address = "oracle_address".to_owned();
-
-        let set_label_de = AssetOracleDataEntry {
-            asset_id: asset_id.clone(),
-            oracle_address: oracle_address.clone(),
-            key: format!("status_<{}>", asset_id),
-            data_type: DataEntryType::Int,
-            bin_val: None,
-            bool_val: None,
-            int_val: Some(ASSET_ORACLE_VERIFICATION_STATUS_VERIFIED),
-            str_val: None,
-        };
-
-        let reset_label_de = AssetOracleDataEntry {
-            asset_id: asset_id.clone(),
-            oracle_address: oracle_address.clone(),
-            key: format!("status_<{}>", asset_id),
-            data_type: DataEntryType::Int,
-            bin_val: None,
-            bool_val: None,
-            int_val: Some(3),
-            str_val: None,
-        };
-
-        let empty_de = AssetOracleDataEntry {
-            asset_id: asset_id.clone(),
-            oracle_address: oracle_address.clone(),
-            key: "bool".to_owned(),
-            data_type: DataEntryType::Bool,
-            bin_val: None,
-            bool_val: Some(true),
-            int_val: None,
-            str_val: None,
-        };
-
-        // will set label
-        let oracles_data = vec![(
-            oracle_address.clone(),
-            vec![
-                empty_de.clone(),
-                reset_label_de.clone(),
-                set_label_de.clone(),
-            ],
-        )]
-        .into_iter()
-        .collect::<HashMap<String, Vec<AssetOracleDataEntry>>>();
-
-        assert!(matches!(
-            extract_asset_label_update(&oracles_data),
-            Some(AssetLabelUpdate::SetLabel(AssetLabel::WaVerified))
-        ));
-
-        // will not set label
-        let oracles_data = vec![(
-            oracle_address.clone(),
-            vec![
-                empty_de.clone(),
-                set_label_de.clone(),
-                reset_label_de.clone(),
-            ],
-        )]
-        .into_iter()
-        .collect::<HashMap<String, Vec<AssetOracleDataEntry>>>();
-
-        assert!(matches!(
-            extract_asset_label_update(&oracles_data),
-            Some(AssetLabelUpdate::DeleteLabel(AssetLabel::WaVerified))
-        ));
-
-        // there is no label update
-        let oracles_data = vec![(
-            oracle_address.clone(),
-            vec![empty_de.clone(), empty_de.clone(), empty_de],
-        )]
-        .into_iter()
-        .collect::<HashMap<String, Vec<AssetOracleDataEntry>>>();
-
-        assert!(matches!(extract_asset_label_update(&oracles_data), None));
     }
 }
