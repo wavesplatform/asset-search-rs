@@ -61,6 +61,13 @@ mod tests {
     }
 
     #[test]
+    fn should_skip_empty_label_addition() {
+        let udd = AssetUserDefinedData::new("asset_id");
+        let udd_with_new_label = udd.add_label("");
+        assert_eq!(udd_with_new_label.labels, [] as [&str; 0]);
+    }
+
+    #[test]
     fn should_delete_label() {
         let udd = AssetUserDefinedData::new("asset_id");
         let udd_with_new_label = udd.delete_label("WA_VERIFIED");
