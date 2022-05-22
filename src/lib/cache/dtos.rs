@@ -79,8 +79,9 @@ impl AssetUserDefinedData {
             acc.insert(cur.to_owned());
             acc
         });
-        labels.insert(label.to_owned());
-
+        if !label.is_empty() {
+            labels.insert(label.to_owned());
+        };
         Self {
             asset_id: self.asset_id.clone(),
             ticker: self.ticker.clone(),

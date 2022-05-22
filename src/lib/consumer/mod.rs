@@ -1772,7 +1772,7 @@ fn is_asset_labels_data_entry(key: &str) -> bool {
 }
 
 fn parse_asset_labels(value: &str) -> Vec<String> {
-    value.split("__").map(|l| l.to_owned()).collect()
+    value.split("__").map(|l| l.to_owned()).filter(|l| !l.is_empty()).collect()
 }
 
 fn asset_info_updates_from_asset_labels_update(
@@ -1913,10 +1913,27 @@ where
 #[cfg(test)]
 mod tests {
     use super::escape_unicode_null;
+    use super::parse_asset_labels;
 
     #[test]
     fn should_escape_unicode_null() {
         assert!("asd\0".contains("\0"));
         assert_eq!(escape_unicode_null("asd\0"), "asd\\0");
     }
+
+    #[test]
+    fn should_filter_empty_labels() {
+        assert_eq!(parse_asset_labels(""), [] as [&str; 0]);
+        assert_eq!(parse_asset_labels("__"), [] as [&str; 0]);
+        assert_eq!(parse_asset_labels("____"), [] as [&str; 0]);
+        assert_eq!(parse_asset_labels("DEFO"), ["DEFO"]);
+        assert_eq!(parse_asset_labels("__DEFO"), ["DEFO"]);
+        assert_eq!(parse_asset_labels("DEFO__"), ["DEFO"]);
+        assert_eq!(parse_asset_labels("__DEFO__"), ["DEFO"]);
+        assert_eq!(parse_asset_labels("DEFO__GATEWAY"), ["DEFO", "GATEWAY"]);
+        assert_eq!(parse_asset_labels("DEFO__GATEWAY__"), ["DEFO", "GATEWAY"]);
+        assert_eq!(parse_asset_labels("__DEFO__GATEWAY"), ["DEFO", "GATEWAY"]);
+        assert_eq!(parse_asset_labels("__DEFO__GATEWAY__"), ["DEFO", "GATEWAY"]);
+        assert_eq!(parse_asset_labels("DEFO____GATEWAY"), ["DEFO", "GATEWAY"]);
+    } 
 }
