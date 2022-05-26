@@ -20,7 +20,7 @@ lazy_static! {
         a.precision,
         a.description,
         bm.height,
-        a.time_stamp as timestamp,
+        to_timestamp(bm.time_stamp / 1000) as timestamp,
         a.issuer,
         a.quantity,
         a.reissuable,
