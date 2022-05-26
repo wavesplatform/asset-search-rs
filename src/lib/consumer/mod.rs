@@ -13,11 +13,11 @@ use std::str;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc::Receiver;
-use waves_protobuf_schemas::waves::Transaction;
 use waves_protobuf_schemas::waves::{
     data_transaction_data::data_entry::Value,
     events::{StateUpdate, TransactionMetadata},
-    SignedTransaction,
+    signed_transaction::Transaction,
+    SignedTransaction, Transaction as WavesTx,
 };
 use wavesexchange_log::{debug, info, timer};
 
@@ -683,14 +683,19 @@ fn extract_base_asset_info_updates(
                 .iter()
                 .filter_map(|asset_update| {
                     if let Some(asset_details) = &asset_update.after {
-                        let time_stamp = match tx.data.transaction {
-                            Some(Transaction { timestamp, .. }) => DateTime::from_utc(
-                                NaiveDateTime::from_timestamp(
-                                    timestamp / 1000,
-                                    timestamp as u32 % 1000 * 1000,
-                                ),
-                                Utc,
-                            ),
+                        let time_stamp = match tx.data.transaction.as_ref() {
+                            Some(stx) => match stx {
+                                Transaction::WavesTransaction(WavesTx { timestamp, .. }) => {
+                                    DateTime::from_utc(
+                                        NaiveDateTime::from_timestamp(
+                                            timestamp / 1000,
+                                            *timestamp as u32 % 1000 * 1000,
+                                        ),
+                                        Utc,
+                                    )
+                                }
+                                Transaction::EthereumTransaction(_) => return None,
+                            },
                             _ => Utc::now(),
                         };
 
@@ -703,7 +708,7 @@ fn extract_base_asset_info_updates(
                             id: asset_id,
                             name: escape_unicode_null(&asset_details.name),
                             description: escape_unicode_null(&asset_details.description),
-                            issuer: issuer,
+                            issuer,
                             precision: asset_details.decimals,
                             smart: asset_details
                                 .script_info
@@ -843,6 +848,10 @@ fn extract_asset_related_data_entries_updates(
         .data_entries
         .iter()
         .filter_map(|data_entry_update| {
+            let transaction = match tx.data.transaction.as_ref() {
+                Some(Transaction::WavesTransaction(wtx)) => wtx,
+                Some(Transaction::EthereumTransaction(_)) | None => return None,
+            };
             data_entry_update.data_entry.as_ref().and_then(|de| {
                 let oracle_address = bs58::encode(&data_entry_update.address).into_string();
                 if waves_association_address == &oracle_address {
@@ -851,14 +860,7 @@ fn extract_asset_related_data_entries_updates(
                         &de.key,
                     );
                     let time_stamp = DateTime::from_utc(
-                        NaiveDateTime::from_timestamp(
-                            tx.data
-                                .transaction
-                                .as_ref()
-                                .map(|t| t.timestamp / 1000)
-                                .unwrap(),
-                            0,
-                        ),
+                        NaiveDateTime::from_timestamp(transaction.timestamp / 1000, 0),
                         Utc,
                     );
 
@@ -1162,7 +1164,9 @@ fn extract_issuers_balance_updates(
                 .balances
                 .iter()
                 .map(move |balance_update| match tx.data.transaction {
-                    Some(Transaction { timestamp, .. }) => (Some(timestamp), balance_update),
+                    Some(Transaction::WavesTransaction(WavesTx { timestamp, .. })) => {
+                        (Some(timestamp), balance_update)
+                    }
                     _ => (None, balance_update),
                 })
         }))
@@ -1772,7 +1776,11 @@ fn is_asset_labels_data_entry(key: &str) -> bool {
 }
 
 fn parse_asset_labels(value: &str) -> Vec<String> {
-    value.split("__").map(|l| l.to_owned()).filter(|l| !l.is_empty()).collect()
+    value
+        .split("__")
+        .map(|l| l.to_owned())
+        .filter(|l| !l.is_empty())
+        .collect()
 }
 
 fn asset_info_updates_from_asset_labels_update(
@@ -1935,5 +1943,5 @@ mod tests {
         assert_eq!(parse_asset_labels("__DEFO__GATEWAY"), ["DEFO", "GATEWAY"]);
         assert_eq!(parse_asset_labels("__DEFO__GATEWAY__"), ["DEFO", "GATEWAY"]);
         assert_eq!(parse_asset_labels("DEFO____GATEWAY"), ["DEFO", "GATEWAY"]);
-    } 
+    }
 }
