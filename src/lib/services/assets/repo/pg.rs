@@ -20,7 +20,7 @@ lazy_static! {
         a.precision,
         a.description,
         bm.height,
-        to_timestamp(bm.time_stamp / 1000) as timestamp,
+        (SELECT MIN(time_stamp) FROM assets WHERE id = a.id) as timestamp,
         a.issuer,
         a.quantity,
         a.reissuable,
