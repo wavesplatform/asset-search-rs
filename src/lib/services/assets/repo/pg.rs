@@ -20,7 +20,7 @@ lazy_static! {
         a.precision,
         a.description,
         bm.height,
-        (SELECT MIN(time_stamp) FROM assets WHERE id = a.id) as timestamp,
+        (SELECT DATE_TRUNC('second', MIN(time_stamp)) FROM assets WHERE id = a.id) as timestamp,
         a.issuer,
         a.quantity,
         a.reissuable,
