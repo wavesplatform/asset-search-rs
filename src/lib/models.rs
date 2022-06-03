@@ -170,6 +170,7 @@ pub enum AssetInfoUpdate {
     SponsorOutLeasing(i64),
     OraclesData(HashMap<String, Vec<AssetOracleDataEntry>>),
     Labels(Vec<String>),
+    Ticker(String),
 }
 
 #[derive(Clone, Debug)]

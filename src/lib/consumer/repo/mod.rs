@@ -8,6 +8,9 @@ use super::models::asset::{
 use super::models::asset_labels::{
     AssetLabels, AssetLabelsOverride, DeletedAssetLabels, InsertableAssetLabels,
 };
+use super::models::asset_tickers::{
+    AssetTicker, AssetTickerOverride, DeletedAssetTicker, InsertableAssetTicker,
+};
 use super::models::block_microblock::BlockMicroblock;
 use super::models::data_entry::{DataEntryOverride, DeletedDataEntry, InsertableDataEntry};
 use super::models::issuer_balance::{
@@ -91,6 +94,26 @@ pub trait Repo {
     fn set_asset_labels_next_update_uid(&self, new_uid: i64) -> Result<()>;
 
     fn rollback_asset_labels(&self, block_uid: &i64) -> Result<Vec<DeletedAssetLabels>>;
+
+    //
+    // ASSET TICKERS
+    //
+
+    fn mget_asset_tickers(&self, asset_ids: &[&str]) -> Result<Vec<AssetTicker>>;
+
+    fn get_next_asset_tickers_uid(&self) -> Result<i64>;
+
+    fn insert_asset_tickers(&self, updates: &Vec<InsertableAssetTicker>) -> Result<()>;
+
+    fn update_asset_tickers_block_references(&self, block_uid: &i64) -> Result<()>;
+
+    fn close_asset_tickers_superseded_by(&self, updates: &Vec<AssetTickerOverride>) -> Result<()>;
+
+    fn reopen_asset_tickers_superseded_by(&self, current_superseded_by: &Vec<i64>) -> Result<()>;
+
+    fn set_asset_tickers_next_update_uid(&self, new_uid: i64) -> Result<()>;
+
+    fn rollback_asset_tickers(&self, block_uid: &i64) -> Result<Vec<DeletedAssetTicker>>;
 
     //
     // DATA ENTRIES

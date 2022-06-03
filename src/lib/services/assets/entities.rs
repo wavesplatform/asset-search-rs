@@ -44,6 +44,8 @@ pub struct Asset {
     pub sponsor_regular_balance: Option<i64>,
     #[sql_type = "Nullable<BigInt>"]
     pub sponsor_out_leasing: Option<i64>,
+    #[sql_type = "Nullable<Text>"]
+    pub ticker: Option<String>,
 }
 
 #[derive(Clone, Debug, Queryable)]
@@ -95,6 +97,7 @@ impl AssetBlockchainData {
         let asset_blockchain_data = Self {
             id: asset.id.clone(),
             name: asset.name.clone(),
+            ticker: asset.ticker.clone(),
             precision: asset.precision,
             description: asset.description.clone(),
             height: asset.height,

@@ -21,6 +21,7 @@ pub enum InvalidateCacheMode {
 pub struct AssetBlockchainData {
     pub id: String,
     pub name: String,
+    pub ticker: Option<String>,
     pub precision: i32,
     pub description: String,
     pub height: i32,
@@ -40,6 +41,7 @@ impl From<&crate::models::AssetInfo> for AssetBlockchainData {
         Self {
             id: a.asset.id.clone(),
             name: a.asset.name.clone(),
+            ticker: a.asset.ticker.clone(),
             precision: a.asset.precision,
             description: a.asset.description.clone(),
             height: a.asset.height,
@@ -169,6 +171,10 @@ impl From<(&AssetBlockchainData, &Vec<AssetInfoUpdate>)> for AssetBlockchainData
                     // It does not need to be handled
                     cur
                 }
+                AssetInfoUpdate::Ticker(_) => {
+                    // It does not need to be handled
+                    cur
+                }
                 AssetInfoUpdate::SponsorRegularBalance(regular_balance) => {
                     if cur.min_sponsored_fee.is_some() {
                         match cur.sponsor_balance.as_mut() {
@@ -226,6 +232,7 @@ impl TryFrom<&Vec<AssetInfoUpdate>> for AssetBlockchainData {
             height: base.update_height,
             timestamp: base.updated_at,
             name: base.name.to_owned(),
+            ticker: None,
             description: base.description.to_owned(),
             quantity: base.quantity,
             reissuable: base.reissuable,

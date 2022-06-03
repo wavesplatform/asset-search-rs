@@ -20,6 +20,7 @@ pub struct ConfigFlat {
     pub max_wait_time_in_secs: u64,
     pub chain_id: u8,
     pub waves_association_address: String,
+    pub asset_storage_address: String,
 }
 
 #[derive(Debug, Clone)]
@@ -30,6 +31,7 @@ pub struct Config {
     pub max_wait_time_in_secs: u64,
     pub chain_id: u8,
     pub waves_association_address: String,
+    pub asset_storage_address: String,
 }
 
 pub fn load() -> Result<Config, Error> {
@@ -42,5 +44,6 @@ pub fn load() -> Result<Config, Error> {
         max_wait_time_in_secs: config_flat.max_wait_time_in_secs,
         chain_id: config_flat.chain_id,
         waves_association_address: config_flat.waves_association_address,
+        asset_storage_address: config_flat.asset_storage_address,
     })
 }

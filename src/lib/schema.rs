@@ -31,6 +31,22 @@ table! {
 }
 
 table! {
+    asset_tickers (superseded_by, asset_id) {
+        uid -> Int8,
+        superseded_by -> Int8,
+        block_uid -> Int8,
+        asset_id -> Text,
+        ticker -> Text,
+    }
+}
+
+table! {
+    asset_tickers_uid_seq (last_value) {
+        last_value -> BigInt,
+    }
+}
+
+table! {
     assets (superseded_by, id) {
         uid -> Int8,
         superseded_by -> Int8,

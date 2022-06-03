@@ -23,6 +23,7 @@ use wavesexchange_log::{debug, info, timer};
 
 use self::models::asset::{AssetOverride, DeletedAsset, InsertableAsset};
 use self::models::asset_labels::{AssetLabelsOverride, DeletedAssetLabels, InsertableAssetLabels};
+use self::models::asset_tickers::{AssetTickerOverride, DeletedAssetTicker, InsertableAssetTicker};
 use self::models::block_microblock::BlockMicroblock;
 use self::models::data_entry::{
     DataEntryOverride, DataEntryUpdate, DataEntryValue, DeletedDataEntry, InsertableDataEntry,
@@ -92,6 +93,12 @@ pub struct AssetLabelsUpdate {
     pub labels: Vec<String>,
 }
 
+#[derive(Debug)]
+pub struct AssetTickerUpdate {
+    pub asset_id: String,
+    pub ticker: String,
+}
+
 #[derive(Clone, Debug)]
 pub enum AssetLabelUpdate {
     SetLabel(String),
@@ -119,6 +126,7 @@ pub async fn start<T, R, CBD, CUDD>(
     max_wait_time_in_secs: u64,
     chain_id: u8,
     waves_association_address: &str,
+    asset_storage_address: &str,
 ) -> Result<()>
 where
     T: UpdatesSource + Send + Sync + 'static,
@@ -178,6 +186,7 @@ where
                 user_defined_data_cache.clone(),
                 chain_id,
                 waves_association_address,
+                asset_storage_address,
             )?;
 
             info!(
@@ -199,6 +208,7 @@ fn handle_updates<'a, R, CBD, CUDD>(
     user_defined_data_cache: CUDD,
     chain_id: u8,
     waves_association_address: &str,
+    asset_storage_address: &str,
 ) -> Result<()>
 where
     R: repo::Repo,
@@ -250,6 +260,7 @@ where
                     chain_id,
                     bs.as_ref(),
                     waves_association_address,
+                    asset_storage_address,
                 )
             }
             UpdatesItem::Microblock(mba) => handle_appends(
@@ -259,6 +270,7 @@ where
                 chain_id,
                 &vec![mba.to_owned()],
                 waves_association_address,
+                asset_storage_address,
             ),
             UpdatesItem::Rollback(sig) => {
                 let block_uid = repo.clone().get_block_uid(&sig)?;
@@ -282,6 +294,7 @@ fn handle_appends<'a, R, CBD, CUDD>(
     chain_id: u8,
     appends: &Vec<BlockMicroblockAppend>,
     waves_association_address: &str,
+    asset_storage_address: &str,
 ) -> Result<()>
 where
     R: repo::Repo,
@@ -395,6 +408,39 @@ where
         asset_labels_updates_with_block_uids
     };
 
+    // Handle asset tickers updates
+    let asset_tickers_updates_with_block_uids = {
+        timer!("asset tickers updates handling");
+
+        let asset_tickers_updates_with_block_uids: Vec<(&i64, AssetTickerUpdate)> =
+            block_uids_with_appends
+                .iter()
+                .flat_map(|(block_uid, append)| {
+                    append
+                        .txs
+                        .iter()
+                        .flat_map(|tx| {
+                            extract_asset_tickers_updates(
+                                append.height as i32,
+                                tx,
+                                asset_storage_address, // wich address
+                            )
+                        })
+                        .map(|u| (block_uid, u))
+                        .collect_vec()
+                })
+                .collect();
+
+        handle_asset_tickers_updates(repo.clone(), &asset_tickers_updates_with_block_uids)?;
+
+        info!(
+            "handled {} asset tickers updates",
+            asset_tickers_updates_with_block_uids.len()
+        );
+
+        asset_tickers_updates_with_block_uids
+    };
+
     // Handle issuer balances updates
     let issuer_balances_updates_with_block_uids = {
         timer!("issuer balances updates handling");
@@ -464,6 +510,7 @@ where
     // Invalidate assets cache
     // 1. Collect asset info updates grouped by asset id
     // 2. Extract asset info updates from asset labels updates
+    // 2.1. Extract asset info updates from asset labels updates
     // 3. Extract asset info updates from data entries updates
     // 4. Extract asset info updates from issuer balances updates
     // 5. Extract asset info updates from out leasing updates
@@ -498,6 +545,10 @@ where
     let assets_info_updates_by_asset_labels =
         asset_info_updates_from_asset_labels_update(&asset_labels_updates_with_block_uids)?;
 
+    // 2.1.
+    let assets_info_updates_by_asset_tickers =
+        asset_info_updates_from_asset_tickers_update(&asset_tickers_updates_with_block_uids)?;
+
     // 3.
     let assets_info_updates_by_data_entries =
         asset_info_updates_from_data_entries_updates(&data_entries_updates_with_block_uids)?;
@@ -518,6 +569,7 @@ where
     let assets_info_updates = assets_info_updates
         .into_iter()
         .chain(assets_info_updates_by_asset_labels.into_iter())
+        .chain(assets_info_updates_by_asset_tickers.into_iter())
         .chain(assets_info_updates_by_data_entries.into_iter())
         .chain(assets_info_updates_by_issuer_balances.into_iter())
         .chain(assets_info_updates_by_out_leasing.into_iter())
@@ -1013,6 +1065,46 @@ fn handle_asset_related_data_entries_updates<R: repo::Repo>(
     repo.set_data_entries_next_update_uid(data_entries_next_uid + updates_count as i64)
 }
 
+fn extract_asset_tickers_updates(
+    _height: i32,
+    tx: &Tx,
+    asset_storage_address: &str,
+) -> Vec<AssetTickerUpdate> {
+    tx.state_update
+        .data_entries
+        .iter()
+        .filter_map(|data_entry_update| {
+            data_entry_update.data_entry.as_ref().and_then(|de| {
+                let oracle_address = bs58::encode(&data_entry_update.address).into_string();
+                if asset_storage_address == &oracle_address && is_asset_ticker_data_entry(&de.key) {
+                    match de.value.as_ref() {
+                        Some(value) => match value {
+                            Value::StringValue(value)
+                                if asset_storage_address == &oracle_address =>
+                            {
+                                frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetTickerUpdate {
+                                    asset_id: asset_id,
+                                    ticker: value.clone(),
+                                })
+                            }
+                            _ => None,
+                        },
+                        // key was deleted -> drop asset ticker
+                        None => {
+                            frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetTickerUpdate {
+                                asset_id,
+                                ticker: "".into(),
+                            })
+                        }
+                    }
+                } else {
+                    None
+                }
+            })
+        })
+        .collect_vec()
+}
+
 // https://confluence.wavesplatform.com/display/DEXPRODUCTS/WX+Governance#WXGovernance-%D0%9B%D0%B5%D0%B9%D0%B1%D0%BB%D1%8B%D0%B0%D1%81%D1%81%D0%B5%D1%82%D0%B0
 fn extract_asset_labels_updates(
     _height: i32,
@@ -1142,6 +1234,96 @@ fn handle_asset_labels_updates<R: repo::Repo>(
     repo.insert_asset_labels(asset_labels_with_uids_superseded_by)?;
 
     repo.set_asset_labels_next_update_uid(asset_labels_next_uid + updates_count as i64)
+}
+
+fn handle_asset_tickers_updates<R: repo::Repo>(
+    repo: Arc<R>,
+    updates: &[(&i64, AssetTickerUpdate)],
+) -> Result<()> {
+    if updates.is_empty() {
+        return Ok(());
+    }
+
+    let updates_count = updates.len();
+
+    let asset_tickers_next_uid = repo.get_next_asset_tickers_uid()?;
+
+    let asset_tickers_updates = updates
+        .iter()
+        .enumerate()
+        .map(
+            |(update_idx, (block_uid, tickers_update))| InsertableAssetTicker {
+                uid: asset_tickers_next_uid + update_idx as i64,
+                superseded_by: -1,
+                block_uid: *block_uid.clone(),
+                asset_id: tickers_update.asset_id.clone(),
+                ticker: tickers_update.ticker.clone(),
+            },
+        )
+        .collect_vec();
+
+    let mut asset_tickers_grouped: HashMap<InsertableAssetTicker, Vec<InsertableAssetTicker>> =
+        HashMap::new();
+
+    asset_tickers_updates.into_iter().for_each(|update| {
+        let group = asset_tickers_grouped
+            .entry(update.clone())
+            .or_insert(vec![]);
+        group.push(update);
+    });
+
+    let asset_tickers_grouped = asset_tickers_grouped.into_iter().collect_vec();
+
+    let asset_tickers_grouped_with_uids_superseded_by = asset_tickers_grouped
+        .into_iter()
+        .map(|(group_key, group)| {
+            let mut updates = group
+                .into_iter()
+                .sorted_by_key(|item| item.uid)
+                .collect::<Vec<InsertableAssetTicker>>();
+
+            let mut last_uid = std::i64::MAX - 1;
+            (
+                group_key,
+                updates
+                    .as_mut_slice()
+                    .iter_mut()
+                    .rev()
+                    .map(|cur| {
+                        cur.superseded_by = last_uid;
+                        last_uid = cur.uid;
+                        cur.to_owned()
+                    })
+                    .sorted_by_key(|item| item.uid)
+                    .collect(),
+            )
+        })
+        .collect::<Vec<(InsertableAssetTicker, Vec<InsertableAssetTicker>)>>();
+
+    let asset_tickers_first_uids: Vec<AssetTickerOverride> =
+        asset_tickers_grouped_with_uids_superseded_by
+            .iter()
+            .map(|(_, group)| {
+                let first = group.iter().next().unwrap().clone();
+                AssetTickerOverride {
+                    superseded_by: first.uid,
+                    asset_id: first.asset_id,
+                }
+            })
+            .collect();
+
+    repo.close_asset_tickers_superseded_by(&asset_tickers_first_uids)?;
+
+    let asset_tickers_with_uids_superseded_by = &asset_tickers_grouped_with_uids_superseded_by
+        .clone()
+        .into_iter()
+        .flat_map(|(_, v)| v)
+        .sorted_by_key(|asset_tickers| asset_tickers.uid)
+        .collect_vec();
+
+    repo.insert_asset_tickers(asset_tickers_with_uids_superseded_by)?;
+
+    repo.set_asset_tickers_next_update_uid(asset_tickers_next_uid + updates_count as i64)
 }
 
 fn extract_issuers_balance_updates(
@@ -1500,6 +1682,8 @@ where
 
     rollback_asset_labels(repo.clone(), block_uid)?;
 
+    rollback_asset_tickers(repo.clone(), block_uid)?;
+
     rollback_data_entries(repo.clone(), block_uid)?;
 
     rollback_issuer_balances(repo.clone(), block_uid)?;
@@ -1663,6 +1847,24 @@ fn rollback_asset_labels<R: repo::Repo>(repo: Arc<R>, block_uid: i64) -> Result<
     repo.reopen_asset_labels_superseded_by(&lowest_deleted_uids)
 }
 
+fn rollback_asset_tickers<R: repo::Repo>(repo: Arc<R>, block_uid: i64) -> Result<()> {
+    let deleted = repo.rollback_asset_tickers(&block_uid)?;
+
+    let mut grouped_deleted: HashMap<DeletedAssetTicker, Vec<DeletedAssetTicker>> = HashMap::new();
+
+    deleted.into_iter().for_each(|item| {
+        let group = grouped_deleted.entry(item.clone()).or_insert(vec![]);
+        group.push(item);
+    });
+
+    let lowest_deleted_uids: Vec<i64> = grouped_deleted
+        .into_iter()
+        .filter_map(|(_, group)| group.into_iter().min_by_key(|i| i.uid).map(|i| i.uid))
+        .collect();
+
+    repo.reopen_asset_tickers_superseded_by(&lowest_deleted_uids)
+}
+
 fn rollback_data_entries<R: repo::Repo>(repo: Arc<R>, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_data_entries(&block_uid)?;
 
@@ -1775,6 +1977,10 @@ fn is_asset_labels_data_entry(key: &str) -> bool {
     key.starts_with("%s%s__labels__")
 }
 
+fn is_asset_ticker_data_entry(key: &str) -> bool {
+    key.starts_with("%s%s__assetId2ticker__")
+}
+
 fn parse_asset_labels(value: &str) -> Vec<String> {
     value
         .split("__")
@@ -1797,6 +2003,22 @@ fn asset_info_updates_from_asset_labels_update(
                 acc
             });
 
+    Ok(asset_info_updates)
+}
+
+fn asset_info_updates_from_asset_tickers_update(
+    updates: &[(&i64, AssetTickerUpdate)],
+) -> Result<HashMap<String, AssetInfoUpdate>, AppError> {
+    let asset_info_updates =
+        updates
+            .clone()
+            .into_iter()
+            .fold(HashMap::new(), |mut acc, (_, update)| {
+                // set or update asset ticker update
+                let asset_info_update = AssetInfoUpdate::Ticker(update.ticker.clone());
+                acc.insert(update.asset_id.clone(), asset_info_update);
+                acc
+            });
     Ok(asset_info_updates)
 }
 

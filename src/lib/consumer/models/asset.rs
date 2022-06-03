@@ -101,6 +101,8 @@ pub struct QueryableAsset {
     pub sponsor_regular_balance: Option<i64>,
     #[sql_type = "Nullable<BigInt>"]
     pub sponsor_out_leasing: Option<i64>,
+    #[sql_type = "Nullable<Text>"]
+    pub ticker: Option<String>,
 }
 
 impl From<&QueryableAsset> for BaseAssetInfoUpdate {
@@ -157,6 +159,7 @@ impl AssetBlockchainData {
         Self {
             id: asset.id.clone(),
             name: asset.name.clone(),
+            ticker: asset.ticker.clone(),
             precision: asset.precision,
             description: asset.description.clone(),
             height: asset.height,

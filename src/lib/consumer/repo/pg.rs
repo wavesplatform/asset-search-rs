@@ -19,12 +19,15 @@ use super::super::models::{
 };
 use super::super::PrevHandledHeight;
 use super::Repo;
+use crate::consumer::models::asset_tickers::{
+    AssetTicker, AssetTickerOverride, DeletedAssetTicker, InsertableAssetTicker,
+};
 use crate::db::enums::DataEntryValueTypeMapping;
 use crate::error::Error as AppError;
 use crate::schema::{
-    asset_labels, asset_labels_uid_seq, assets, assets_uid_seq, blocks_microblocks, data_entries,
-    data_entries_uid_seq, issuer_balances, issuer_balances_uid_seq, out_leasings,
-    out_leasings_uid_seq,
+    asset_labels, asset_labels_uid_seq, asset_tickers, asset_tickers_uid_seq, assets,
+    assets_uid_seq, blocks_microblocks, data_entries, data_entries_uid_seq, issuer_balances,
+    issuer_balances_uid_seq, out_leasings, out_leasings_uid_seq,
 };
 use crate::tuple_len::TupleLen;
 use crate::waves::WAVES_ID;
@@ -480,6 +483,124 @@ impl Repo for PgRepoImpl {
             })
             .map_err(|err| {
                 let context = format!("Cannot rollback asset_labels: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    //
+    // ASSET TICKERS
+    //
+
+    fn mget_asset_tickers(&self, asset_ids: &[&str]) -> Result<Vec<AssetTicker>> {
+        let q = asset_tickers::table
+            .select((asset_tickers::asset_id, asset_tickers::ticker))
+            .filter(asset_tickers::superseded_by.eq(MAX_UID))
+            .filter(asset_tickers::asset_id.eq_any(asset_ids));
+
+        q.load(&self.conn).map_err(|err| {
+            let context = format!("Cannot assets tickers: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
+    }
+
+    fn get_next_asset_tickers_uid(&self) -> Result<i64> {
+        asset_tickers_uid_seq::table
+            .select(asset_tickers_uid_seq::last_value)
+            .first(&self.conn)
+            .map_err(|err| {
+                let context = format!("Cannot get next asset tickers update uid: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn close_asset_tickers_superseded_by(&self, updates: &Vec<AssetTickerOverride>) -> Result<()> {
+        let mut asset_ids = vec![];
+        let mut superseded_by_uids = vec![];
+
+        updates.iter().for_each(|u| {
+            asset_ids.push(&u.asset_id);
+            superseded_by_uids.push(&u.superseded_by);
+        });
+
+        let q = diesel::sql_query("UPDATE asset_tickers SET superseded_by = updates.superseded_by FROM (SELECT UNNEST($1::text[]) as asset_id, UNNEST($2::int8[]) as superseded_by) AS updates WHERE asset_tickers.asset_id = updates.asset_id AND asset_tickers.superseded_by = $3;")
+            .bind::<Array<VarChar>, _>(asset_ids)
+            .bind::<Array<BigInt>, _>(superseded_by_uids)
+            .bind::<BigInt, _>(MAX_UID);
+
+        q.execute(&self.conn).map(|_| ()).map_err(|err| {
+            let context = format!("Cannot close asset_tickers superseded_by: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
+    }
+
+    fn insert_asset_tickers(&self, updates: &Vec<InsertableAssetTicker>) -> Result<()> {
+        let columns_count = asset_tickers::table::all_columns().len();
+        let chunk_size = (PG_MAX_INSERT_FIELDS_COUNT / columns_count) / 10 * 10;
+        updates
+            .to_owned()
+            .chunks(chunk_size)
+            .into_iter()
+            .try_fold((), |_, chunk| {
+                diesel::insert_into(asset_tickers::table)
+                    .values(chunk)
+                    .execute(&self.conn)
+                    .map(|_| ())
+            })
+            .map_err(|err| {
+                let context = format!("Cannot insert new asset tickers: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn set_asset_tickers_next_update_uid(&self, new_uid: i64) -> Result<()> {
+        diesel::sql_query(format!(
+            "select setval('asset_tickers_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
+            new_uid
+        ))
+        .execute(&self.conn)
+        .map(|_| ())
+        .map_err(|err| {
+            let context = format!("Cannot set asset_tickers next update uid: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
+    }
+
+    fn rollback_asset_tickers(&self, block_uid: &i64) -> Result<Vec<DeletedAssetTicker>> {
+        diesel::delete(asset_tickers::table)
+            .filter(asset_tickers::block_uid.gt(block_uid))
+            .returning((asset_tickers::uid, asset_tickers::asset_id))
+            .get_results(&self.conn)
+            .map(|bs| {
+                bs.into_iter()
+                    .map(|(uid, asset_id)| DeletedAssetTicker { uid, asset_id })
+                    .collect()
+            })
+            .map_err(|err| {
+                let context = format!("Cannot rollback asset_tickers: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn reopen_asset_tickers_superseded_by(&self, current_superseded_by: &Vec<i64>) -> Result<()> {
+        diesel::sql_query("UPDATE asset_tickers SET superseded_by = $1 FROM (SELECT UNNEST($2) AS superseded_by) AS current WHERE asset_tickers.superseded_by = current.superseded_by;")
+            .bind::<BigInt, _>(MAX_UID)
+            .bind::<Array<BigInt>, _>(current_superseded_by)
+            .execute(&self.conn)
+            .map(|_| ())
+            .map_err(|err| {
+                let context = format!("Cannot reopen asset_tickers superseded_by: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn update_asset_tickers_block_references(&self, block_uid: &i64) -> Result<()> {
+        diesel::update(asset_tickers::table)
+            .set((asset_tickers::block_uid.eq(block_uid),))
+            .filter(asset_tickers::block_uid.gt(block_uid))
+            .execute(&self.conn)
+            .map(|_| ())
+            .map_err(|err| {
+                let context = format!("Cannot update asset_tickers block references: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
             })
     }
