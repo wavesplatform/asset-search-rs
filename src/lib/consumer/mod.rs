@@ -126,7 +126,6 @@ pub async fn start<T, R, CBD, CUDD>(
     max_wait_time_in_secs: u64,
     chain_id: u8,
     waves_association_address: &str,
-    asset_storage_address: &str,
 ) -> Result<()>
 where
     T: UpdatesSource + Send + Sync + 'static,
@@ -186,7 +185,6 @@ where
                 user_defined_data_cache.clone(),
                 chain_id,
                 waves_association_address,
-                asset_storage_address,
             )?;
 
             info!(
@@ -208,7 +206,6 @@ fn handle_updates<'a, R, CBD, CUDD>(
     user_defined_data_cache: CUDD,
     chain_id: u8,
     waves_association_address: &str,
-    asset_storage_address: &str,
 ) -> Result<()>
 where
     R: repo::Repo,
@@ -260,7 +257,6 @@ where
                     chain_id,
                     bs.as_ref(),
                     waves_association_address,
-                    asset_storage_address,
                 )
             }
             UpdatesItem::Microblock(mba) => handle_appends(
@@ -270,7 +266,6 @@ where
                 chain_id,
                 &vec![mba.to_owned()],
                 waves_association_address,
-                asset_storage_address,
             ),
             UpdatesItem::Rollback(sig) => {
                 let block_uid = repo.clone().get_block_uid(&sig)?;
@@ -294,7 +289,6 @@ fn handle_appends<'a, R, CBD, CUDD>(
     chain_id: u8,
     appends: &Vec<BlockMicroblockAppend>,
     waves_association_address: &str,
-    asset_storage_address: &str,
 ) -> Result<()>
 where
     R: repo::Repo,
@@ -423,7 +417,7 @@ where
                             extract_asset_tickers_updates(
                                 append.height as i32,
                                 tx,
-                                asset_storage_address, // wich address
+                                waves_association_address, // wich address
                             )
                         })
                         .map(|u| (block_uid, u))
@@ -1068,7 +1062,7 @@ fn handle_asset_related_data_entries_updates<R: repo::Repo>(
 fn extract_asset_tickers_updates(
     _height: i32,
     tx: &Tx,
-    asset_storage_address: &str,
+    waves_association_address: &str,
 ) -> Vec<AssetTickerUpdate> {
     tx.state_update
         .data_entries
@@ -1076,11 +1070,13 @@ fn extract_asset_tickers_updates(
         .filter_map(|data_entry_update| {
             data_entry_update.data_entry.as_ref().and_then(|de| {
                 let oracle_address = bs58::encode(&data_entry_update.address).into_string();
-                if asset_storage_address == &oracle_address && is_asset_ticker_data_entry(&de.key) {
+                if waves_association_address == &oracle_address
+                    && is_asset_ticker_data_entry(&de.key)
+                {
                     match de.value.as_ref() {
                         Some(value) => match value {
                             Value::StringValue(value)
-                                if asset_storage_address == &oracle_address =>
+                                if waves_association_address == &oracle_address =>
                             {
                                 frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetTickerUpdate {
                                     asset_id: asset_id,

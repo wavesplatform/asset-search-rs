@@ -351,6 +351,7 @@ impl Repo for PgRepoImpl {
             a.min_sponsored_fee,
             a.smart,
             a.nft,
+            null as ticker,
             CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ib.regular_balance END AS sponsor_regular_balance,
             CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ol.amount END          AS sponsor_out_leasing
             FROM assets AS a

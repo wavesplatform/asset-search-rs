@@ -46,7 +46,6 @@ async fn main() -> Result<()> {
         config.consumer.max_wait_time_in_secs,
         config.consumer.chain_id,
         &config.consumer.waves_association_address,
-        &config.consumer.asset_storage_address,
     )
     .await
     {

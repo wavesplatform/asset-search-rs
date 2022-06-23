@@ -82,12 +82,14 @@ impl AssetBlockchainData {
     ) -> Result<Self, AppError> {
         let sponsor_balance = if asset.min_sponsored_fee.is_some() {
             Some(AssetSponsorBalance {
-                regular_balance: asset.sponsor_regular_balance.ok_or(
-                    AppError::ConsistencyError(format!(
-                        "Expected asset {} sponsor ({}) regular balance",
-                        asset.id, asset.issuer
-                    )),
-                )?,
+                // regular_balance: asset.sponsor_regular_balance.ok_or(
+                //     AppError::ConsistencyError(format!(
+                //         "Expected asset {} sponsor ({}) regular balance",
+                //         asset.id, asset.issuer
+                //     )),
+                // )?,
+                regular_balance: asset.sponsor_regular_balance.unwrap_or(0), //temporary
+
                 out_leasing: asset.sponsor_out_leasing,
             })
         } else {
