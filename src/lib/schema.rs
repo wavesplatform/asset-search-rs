@@ -103,14 +103,6 @@ table! {
 }
 
 table! {
-    predefined_verifications (asset_id) {
-        asset_id -> Text,
-        ticker -> Nullable<Text>,
-        verification_status -> crate::db::enums::VerificationStatusValueTypeMapping,
-    }
-}
-
-table! {
     issuer_balances (superseded_by, address) {
         uid -> Int8,
         superseded_by -> Int8,
@@ -148,7 +140,6 @@ allow_tables_to_appear_in_same_query!(
     assets,
     blocks_microblocks,
     data_entries,
-    predefined_verifications,
     issuer_balances,
     out_leasings,
 );

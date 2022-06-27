@@ -7,11 +7,9 @@ use std::collections::HashMap;
 
 use crate::{
     cache::{AssetBlockchainData, AssetUserDefinedData},
-    db::enums::{
-        DataEntryValueType, VerificationStatusValueType, VerificationStatusValueTypeMapping,
-    },
+    db::enums::DataEntryValueType,
     error::Error as AppError,
-    models::{AssetOracleDataEntry, AssetSponsorBalance, DataEntryType, VerificationStatus},
+    models::{AssetOracleDataEntry, AssetSponsorBalance, DataEntryType},
 };
 
 #[derive(Clone, Debug, QueryableByName)]
@@ -133,20 +131,16 @@ pub struct UserDefinedData {
     pub asset_id: String,
     #[sql_type = "Nullable<Text>"]
     pub ticker: Option<String>,
-    #[sql_type = "VerificationStatusValueTypeMapping"]
-    pub verification_status: VerificationStatusValueType,
     #[sql_type = "Array<Text>"]
     pub labels: Vec<String>,
 }
 
 impl From<&UserDefinedData> for AssetUserDefinedData {
     fn from(d: &UserDefinedData) -> Self {
-        let verification_status = VerificationStatus::from(&d.verification_status);
         let labels = d.labels.clone().into_iter().collect::<Vec<_>>();
         Self {
             asset_id: d.asset_id.clone(),
             ticker: d.ticker.clone(),
-            verification_status,
             labels,
         }
     }

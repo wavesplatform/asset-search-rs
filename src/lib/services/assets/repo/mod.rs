@@ -2,7 +2,7 @@ pub mod pg;
 
 use diesel::sql_types::Text;
 
-use crate::{error::Error as AppError, models::VerificationStatus};
+use crate::error::Error as AppError;
 
 pub use super::entities::{Asset, OracleDataEntry, UserDefinedData};
 
@@ -17,7 +17,6 @@ pub struct FindParams {
     pub search: Option<String>,
     pub ticker: Option<TickerFilter>,
     pub smart: Option<bool>,
-    pub verification_status_in: Option<Vec<VerificationStatus>>,
     pub asset_label_in: Option<Vec<String>>,
     pub issuer_in: Option<Vec<String>>,
     pub limit: u32,

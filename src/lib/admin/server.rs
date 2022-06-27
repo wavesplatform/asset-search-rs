@@ -1,6 +1,5 @@
 use futures::TryFutureExt;
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::sync::Arc;
 use warp::{reject, Filter, Rejection};
 use wavesexchange_log::{debug, error, info};
@@ -13,7 +12,6 @@ use super::InvalidateCacheQueryParams;
 use crate::api::{dtos::ResponseFormat, models::Asset};
 use crate::cache::{self, AssetBlockchainData, AssetUserDefinedData, InvalidateCacheMode};
 use crate::error;
-use crate::models::VerificationStatus;
 use crate::services;
 use crate::services::assets::GetOptions;
 
@@ -86,95 +84,6 @@ pub async fn start(
         }
         _ => internal(ERROR_CODES_PREFIX),
     });
-
-    let asset_verification_status_handler =
-        warp::path!("admin" / "asset" / String / "verification" / String)
-            .and(warp::post())
-            .and(with_api_key.clone())
-            .and(warp::header::<String>(API_KEY_HEADER_NAME))
-            .and(with_assets_service.clone())
-            .and(with_images_service.clone())
-            .and(with_admin_assets_service.clone())
-            .and_then(
-                move |asset_id: String,
-                      verification_status: String,
-                      expected_api_key: String,
-                      provided_api_key: String,
-                      assets_service,
-                      images_service,
-                      admin_assets_service| async move {
-                    api_key_validation(&expected_api_key, &provided_api_key)
-                        .and_then(|_| {
-                            asset_verification_status_controller(
-                                asset_id,
-                                verification_status,
-                                assets_service,
-                                images_service,
-                                admin_assets_service,
-                            )
-                        })
-                        .await
-                },
-            )
-            .map(|res| warp::reply::json(&res));
-
-    let asset_set_ticker_handler = warp::path!("admin" / "asset" / String / "ticker" / String)
-        .and(warp::post())
-        .and(with_api_key.clone())
-        .and(warp::header::<String>(API_KEY_HEADER_NAME))
-        .and(with_assets_service.clone())
-        .and(with_images_service.clone())
-        .and(with_admin_assets_service.clone())
-        .and_then(
-            |asset_id: String,
-             ticker: String,
-             expected_api_key: String,
-             provided_api_key: String,
-             assets_service,
-             images_service,
-             admin_assets_service| async move {
-                api_key_validation(&expected_api_key, &provided_api_key)
-                    .and_then(|_| {
-                        asset_set_ticker_controller(
-                            asset_id,
-                            ticker,
-                            assets_service,
-                            images_service,
-                            admin_assets_service,
-                        )
-                    })
-                    .await
-            },
-        )
-        .map(|res| warp::reply::json(&res));
-
-    let asset_delete_ticker_handler = warp::path!("admin" / "asset" / String / "ticker")
-        .and(warp::delete())
-        .and(with_api_key.clone())
-        .and(warp::header::<String>(API_KEY_HEADER_NAME))
-        .and(with_assets_service.clone())
-        .and(with_images_service.clone())
-        .and(with_admin_assets_service.clone())
-        .and_then(
-            |asset_id: String,
-             expected_api_key: String,
-             provided_api_key: String,
-             assets_service,
-             images_service,
-             admin_assets_service| async move {
-                api_key_validation(&expected_api_key, &provided_api_key)
-                    .and_then(|_| {
-                        asset_delete_ticker_controller(
-                            asset_id,
-                            assets_service,
-                            images_service,
-                            admin_assets_service,
-                        )
-                    })
-                    .await
-            },
-        )
-        .map(|res| warp::reply::json(&res));
 
     let asset_add_label_handler = warp::post()
         .and(warp::path!("admin" / "asset" / String / "labels" / String))
@@ -269,10 +178,7 @@ pub async fn start(
 
     info!("Starting API server at 0.0.0.0:{}", port);
 
-    let routes = asset_verification_status_handler
-        .or(asset_set_ticker_handler)
-        .or(asset_delete_ticker_handler)
-        .or(asset_add_label_handler)
+    let routes = asset_add_label_handler
         .or(asset_delete_label_handler)
         .or(cache_invalidate_handler)
         .recover(move |rej| {
@@ -282,82 +188,6 @@ pub async fn start(
         .with(log);
 
     warp::serve(routes).run(([0, 0, 0, 0], port)).await;
-}
-
-async fn asset_verification_status_controller(
-    asset_id: String,
-    verification_status: String,
-    assets_service: Arc<impl services::assets::Service>,
-    images_service: Arc<impl services::images::Service>,
-    admin_assets_service: Arc<impl services::admin_assets::Service>,
-) -> Result<Asset, Rejection> {
-    let verification_status = VerificationStatus::try_from(verification_status)?;
-    debug!("asset_verification_status_controller"; "asset_id" => &asset_id, "verification_status" => format!("{}", verification_status));
-
-    admin_assets_service
-        .update_verification_status(&asset_id, &verification_status)
-        .await?;
-
-    let maybe_asset_info = assets_service
-        .get(&asset_id, &GetOptions::default())
-        .await?;
-    let has_image = images_service.has_image(&asset_id).await?;
-
-    Ok(Asset::new(
-        maybe_asset_info,
-        has_image,
-        DEFAULT_INCLUDE_METADATA,
-        &DEFAULT_FORMAT,
-    ))
-}
-
-async fn asset_set_ticker_controller(
-    asset_id: String,
-    ticker: String,
-    assets_service: Arc<impl services::assets::Service>,
-    images_service: Arc<impl services::images::Service>,
-    admin_assets_service: Arc<impl services::admin_assets::Service>,
-) -> Result<Asset, Rejection> {
-    debug!("asset_set_ticker_controller"; "asset_id" => &asset_id, "ticker" => &ticker);
-
-    admin_assets_service
-        .update_ticker(&asset_id, Some(&ticker))
-        .await?;
-
-    let maybe_asset_info = assets_service
-        .get(&asset_id, &GetOptions::default())
-        .await?;
-    let has_image = images_service.has_image(&asset_id).await?;
-
-    Ok(Asset::new(
-        maybe_asset_info,
-        has_image,
-        DEFAULT_INCLUDE_METADATA,
-        &DEFAULT_FORMAT,
-    ))
-}
-
-async fn asset_delete_ticker_controller(
-    asset_id: String,
-    assets_service: Arc<impl services::assets::Service>,
-    images_service: Arc<impl services::images::Service>,
-    admin_assets_service: Arc<impl services::admin_assets::Service>,
-) -> Result<Asset, Rejection> {
-    debug!("asset_delete_ticker_controller"; "asset_id" => &asset_id);
-
-    admin_assets_service.update_ticker(&asset_id, None).await?;
-
-    let maybe_asset_info = assets_service
-        .get(&asset_id, &GetOptions::default())
-        .await?;
-    let has_image = images_service.has_image(&asset_id).await?;
-
-    Ok(Asset::new(
-        maybe_asset_info,
-        has_image,
-        DEFAULT_INCLUDE_METADATA,
-        &DEFAULT_FORMAT,
-    ))
 }
 
 async fn asset_add_label_controller(

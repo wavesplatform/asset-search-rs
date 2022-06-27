@@ -231,9 +231,6 @@ impl Service for AssetsService {
                                     &asset_oracles_data,
                                 )?;
 
-                            // user defined data exists for all existing assets
-                            // at least as unknown verification_status
-                            // therefore unwrap-safety is guaranteed
                             let asset_user_defined_data =
                                 assets_user_defined_data.get(&a.id).unwrap();
 
@@ -407,7 +404,6 @@ impl Service for AssetsService {
                 }
             }),
             smart: req.smart,
-            verification_status_in: req.verification_status_in.clone(),
             asset_label_in: req.asset_label_in.clone(),
             issuer_in: req.issuer_in.clone(),
             after: req.after.clone(),

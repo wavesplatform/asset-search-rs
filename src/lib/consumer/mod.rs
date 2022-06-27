@@ -655,7 +655,6 @@ where
                     _ => AssetUserDefinedData {
                         asset_id: asset_id.clone(),
                         ticker: None,
-                        verification_status: crate::models::VerificationStatus::Unknown,
                         labels: vec![],
                     },
                 };
@@ -1761,7 +1760,6 @@ where
                 _ => AssetUserDefinedData {
                     asset_id: asset_id.to_string(),
                     ticker: None,
-                    verification_status: crate::models::VerificationStatus::Unknown,
                     labels: vec![],
                 },
             };

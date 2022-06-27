@@ -6,7 +6,6 @@ use std::convert::TryFrom;
 use crate::error::Error as AppError;
 use crate::models::{
     Asset, AssetInfo, AssetInfoUpdate, AssetMetadata, AssetOracleDataEntry, AssetSponsorBalance,
-    VerificationStatus,
 };
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
@@ -62,7 +61,6 @@ impl From<&crate::models::AssetInfo> for AssetBlockchainData {
 pub struct AssetUserDefinedData {
     pub asset_id: String,
     pub ticker: Option<String>,
-    pub verification_status: VerificationStatus,
     pub labels: Vec<String>,
 }
 
@@ -71,7 +69,6 @@ impl AssetUserDefinedData {
         Self {
             asset_id: asset_id.as_ref().to_owned(),
             ticker: None,
-            verification_status: VerificationStatus::default(),
             labels: Vec::<String>::new(),
         }
     }
@@ -87,7 +84,6 @@ impl AssetUserDefinedData {
         Self {
             asset_id: self.asset_id.clone(),
             ticker: self.ticker.clone(),
-            verification_status: self.verification_status.clone(),
             labels: labels.into_iter().collect::<Vec<_>>(),
         }
     }
@@ -102,7 +98,6 @@ impl AssetUserDefinedData {
         Self {
             asset_id: self.asset_id.clone(),
             ticker: self.ticker.clone(),
-            verification_status: self.verification_status.clone(),
             labels,
         }
     }
@@ -135,7 +130,6 @@ impl From<(&AssetBlockchainData, &AssetUserDefinedData)> for AssetInfo {
                 nft: blockchain_data.nft,
             },
             metadata: AssetMetadata {
-                verification_status: user_defined_data.verification_status.clone(),
                 labels: user_defined_data.labels.clone(),
                 sponsor_balance,
                 oracles_data: blockchain_data.oracles_data.clone(),

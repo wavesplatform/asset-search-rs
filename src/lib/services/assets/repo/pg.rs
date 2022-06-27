@@ -6,7 +6,7 @@ use lazy_static::lazy_static;
 use wavesexchange_log::error;
 
 use super::{Asset, AssetId, FindParams, OracleDataEntry, Repo, TickerFilter, UserDefinedData};
-use crate::db::enums::{DataEntryValueTypeMapping, VerificationStatusValueType};
+use crate::db::enums::DataEntryValueTypeMapping;
 use crate::db::PgPool;
 use crate::error::Error as AppError;
 use crate::schema::data_entries;
@@ -53,28 +53,6 @@ impl Repo for PgRepo {
         // conditions have to be collected before assets_cte_query construction
         // because of difference in searching by text and searching by ticker
         let mut conditions = vec![];
-
-        // Verification Statuses Filtering
-        if let Some(verification_statuses) = &params.verification_status_in {
-            let verification_statuses = verification_statuses
-                .iter()
-                .map(|vs| VerificationStatusValueType::from(vs))
-                .collect_vec();
-
-            let verification_statuses_filter =
-                if verification_statuses.contains(&VerificationStatusValueType::Unknown) {
-                    format!(
-                    "(pv.verification_status IS NULL OR pv.verification_status = ANY(ARRAY[{}]))",
-                    verification_statuses.iter().join(",")
-                )
-                } else {
-                    format!(
-                        "pv.verification_status = ANY(ARRAY[{}])",
-                        verification_statuses.iter().join(",")
-                    )
-                };
-            conditions.push(verification_statuses_filter);
-        }
 
         // AssetLabel Filtering
         if let Some(asset_labels) = params.asset_label_in {
@@ -159,7 +137,6 @@ impl Repo for PgRepo {
                 FROM
                     ({}) AS search
                 LEFT JOIN assets AS a ON a.id = search.id AND a.superseded_by = {}
-                LEFT JOIN predefined_verifications AS pv ON pv.asset_id = search.id
                 LEFT JOIN (
                     SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
                     FROM (
@@ -206,7 +183,6 @@ impl Repo for PgRepo {
                     ROW_NUMBER() OVER (ORDER BY a.block_uid ASC, a.id ASC) AS rn
                 FROM
                     (SELECT a.id, a.smart, (SELECT min(a1.block_uid) FROM assets a1 WHERE a1.id = a.id) AS block_uid, a.issuer FROM assets AS a WHERE a.superseded_by = {} AND a.nft = {}) AS a
-                LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id
                 LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {}
                 LEFT JOIN (
                     SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
@@ -368,13 +344,12 @@ impl Repo for PgRepo {
 }
 
 fn generate_assets_user_defined_data_base_sql_query() -> String {
-    format!("SELECT 
+    format!(
+        "SELECT 
         a.id as asset_id,
         ast.ticker,
-        COALESCE(pv.verification_status, 'unknown'::verification_status_value_type) AS verification_status,
         COALESCE(awl.labels, ARRAY[]::text[])  AS labels
         FROM assets a
-        LEFT JOIN predefined_verifications pv ON a.id = pv.asset_id
         LEFT JOIN asset_tickers ast ON a.id = ast.asset_id and ast.superseded_by = {}
         LEFT JOIN (
             SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
@@ -389,7 +364,9 @@ fn generate_assets_user_defined_data_base_sql_query() -> String {
             ) AS data, UNNEST(labels) AS labels_list
             GROUP BY asset_id
         ) AS awl ON awl.asset_id = a.id
-    ", MAX_UID, MAX_UID)
+    ",
+        MAX_UID, MAX_UID
+    )
 }
 
 mod utils {
