@@ -179,6 +179,8 @@ impl Service for AssetsService {
         ids: &[&str],
         opts: &MgetOptions,
     ) -> Result<Vec<Option<AssetInfo>>, AppError> {
+        dbg!("AssetsService:mget");
+
         let assets = match opts.height {
             Some(height) => {
                 let assets = {

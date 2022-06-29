@@ -504,7 +504,7 @@ where
     // Invalidate assets cache
     // 1. Collect asset info updates grouped by asset id
     // 2. Extract asset info updates from asset labels updates
-    // 2.1. Extract asset info updates from asset labels updates
+    // 2.1. Extract asset info updates from asset tickers updates
     // 3. Extract asset info updates from data entries updates
     // 4. Extract asset info updates from issuer balances updates
     // 5. Extract asset info updates from out leasing updates
@@ -2013,6 +2013,7 @@ fn asset_info_updates_from_asset_tickers_update(
                 acc.insert(update.asset_id.clone(), asset_info_update);
                 acc
             });
+
     Ok(asset_info_updates)
 }
 

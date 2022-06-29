@@ -214,6 +214,7 @@ impl TryFrom<&Vec<AssetInfoUpdate>> for AssetBlockchainData {
 
     fn try_from(updates: &Vec<AssetInfoUpdate>) -> Result<Self, Self::Error> {
         let mut updates_it = updates.iter();
+
         let base = match updates_it.next() {
             Some(AssetInfoUpdate::Base(base)) => Ok(base),
             _ => Err(AppError::IncosistDataError("Expected BaseAssetInfoUpdate as 1st update for transforming Vec<AssetInfoUpdate> into AssetBlockchainData".to_owned())),

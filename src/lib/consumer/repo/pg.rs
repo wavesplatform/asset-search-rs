@@ -351,13 +351,14 @@ impl Repo for PgRepoImpl {
             a.min_sponsored_fee,
             a.smart,
             a.nft,
-            null as ticker,
+            ast.ticker,
             CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ib.regular_balance END AS sponsor_regular_balance,
             CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ol.amount END          AS sponsor_out_leasing
             FROM assets AS a
             LEFT JOIN blocks_microblocks bm ON a.block_uid = bm.uid
             LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = $1
             LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = $1
+            LEFT JOIN asset_tickers ast ON a.id = ast.asset_id AND ast.superseded_by = $1
             WHERE a.superseded_by = $1 AND a.nft = $2 AND a.issuer = $3"
         )
         .bind::<BigInt, _>(MAX_UID)
