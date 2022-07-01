@@ -1640,6 +1640,8 @@ fn squash_microblocks<R: repo::Repo>(storage: Arc<R>) -> Result<()> {
 
             storage.update_asset_labels_block_references(&key_block_uid)?;
 
+            storage.update_asset_tickers_block_references(&key_block_uid)?;
+
             storage.update_data_entries_block_references(&key_block_uid)?;
 
             storage.update_issuer_balances_block_references(&key_block_uid)?;
