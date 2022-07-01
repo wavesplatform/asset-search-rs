@@ -16,16 +16,9 @@ use crate::models::AssetInfo;
 use entities::UserDefinedData;
 use repo::{FindParams, TickerFilter};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct GetOptions {
     bypass_cache: bool,
-}
-
-//temporary cache bypass
-impl Default for GetOptions {
-    fn default() -> Self {
-        Self { bypass_cache: true }
-    }
 }
 
 #[derive(Clone, Debug, Default)]

@@ -62,6 +62,10 @@ impl Repo for PgRepo {
                 label_filters.push(format!("awl.labels IS NULL"));
             }
 
+            if asset_labels.contains(&"*".to_string()) {
+                label_filters.push(format!("awl.labels IS NOT NULL"));
+            }
+
             if asset_labels.len() > 0 {
                 let labels_filter = format!(
                     "awl.labels && ARRAY[{}]",
@@ -94,7 +98,7 @@ impl Repo for PgRepo {
 
             let search_escaped_for_like = utils::escape_for_like(&search);
 
-            let search_by_id_query = format!("SELECT a.id, a.smart, ({}) as block_uid, CASE WHEN (ast.ticker IS NULL or ast.ticker == '') THEN 128 ELSE 256 END AS rank FROM assets AS a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND a.id ILIKE '{}'", min_block_uid_subquery, MAX_UID, MAX_UID, false, search_escaped_for_like);
+            let search_by_id_query = format!("SELECT a.id, a.smart, ({}) as block_uid, CASE WHEN (ast.ticker IS NULL or ast.ticker = '') THEN 128 ELSE 256 END AS rank FROM assets AS a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND a.id ILIKE '{}'", min_block_uid_subquery, MAX_UID, MAX_UID, false, search_escaped_for_like);
             // UNION
             let search_by_meta_query = format!("SELECT id, false AS smart, block_uid, ts_rank(to_tsvector('simple', name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN ticker IS NULL THEN 64 ELSE 128 END AS rank FROM asset_metadatas WHERE name ILIKE '{}%'", search, search_escaped_for_like);
             // UNION
@@ -111,9 +115,9 @@ impl Repo for PgRepo {
                     "1=1".to_owned()
                 }
             };
-            let search_by_tsquery_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN (ast.ticker IS NULL or ast.ticker == '') THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND {}", min_block_uid_subquery, search, MAX_UID, MAX_UID, false, tsquery_condition);
+            let search_by_tsquery_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN (ast.ticker IS NULL or ast.ticker = '') THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND {}", min_block_uid_subquery, search, MAX_UID, MAX_UID, false, tsquery_condition);
             // UNION
-            let search_by_name_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN (ast.ticker IS NULL or ast.ticker == '') THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND a.name ILIKE '{}%'", min_block_uid_subquery, search, MAX_UID, MAX_UID, false, search_escaped_for_like);
+            let search_by_name_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN (ast.ticker IS NULL or ast.ticker = '') THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND a.name ILIKE '{}%'", min_block_uid_subquery, search, MAX_UID, MAX_UID, false, search_escaped_for_like);
 
             let search_query = vec![
                 search_by_id_query,
