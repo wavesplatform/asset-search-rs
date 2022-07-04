@@ -14,7 +14,7 @@ use crate::error::Error as AppError;
 use crate::models::AssetInfo;
 
 use entities::UserDefinedData;
-use repo::{FindParams, TickerFilter};
+use repo::{FindParams, LabelFilter, TickerFilter};
 
 #[derive(Clone, Debug, Default)]
 pub struct GetOptions {
@@ -396,6 +396,13 @@ impl Service for AssetsService {
                     TickerFilter::Any
                 } else {
                     TickerFilter::One(ticker.to_owned())
+                }
+            }),
+            label: req.label.as_ref().map(|label| {
+                if label.as_str() == "*" {
+                    LabelFilter::Any
+                } else {
+                    LabelFilter::One(label.to_owned())
                 }
             }),
             smart: req.smart,

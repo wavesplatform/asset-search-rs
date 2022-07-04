@@ -10,6 +10,7 @@ use crate::db::enums::DataEntryValueTypeMapping;
 use crate::db::PgPool;
 use crate::error::Error as AppError;
 use crate::schema::data_entries;
+use crate::services::assets::repo::LabelFilter;
 
 const MAX_UID: i64 = i64::MAX - 1;
 
@@ -60,10 +61,6 @@ impl Repo for PgRepo {
 
             if asset_labels.contains(&"null".to_string()) {
                 label_filters.push(format!("awl.labels IS NULL"));
-            }
-
-            if asset_labels.contains(&"*".to_string()) {
-                label_filters.push(format!("awl.labels IS NOT NULL"));
             }
 
             if asset_labels.len() > 0 {
@@ -175,6 +172,19 @@ impl Repo for PgRepo {
                 }
             }
 
+            // search by label only if there is not searching by text
+            if let Some(filter_label) = params.label.as_ref() {
+                match filter_label {
+                    LabelFilter::One(label) => {
+                        let label = utils::pg_escape(label);
+                        conditions.push(format!("'{}' = ANY(labels)", label));
+                    }
+                    LabelFilter::Any => {
+                        conditions.push(format!("array_length(labels,1) > 0"));
+                    }
+                }
+            }
+
             let conditions = if conditions.len() > 0 {
                 format!("WHERE {}", conditions.iter().join(" AND "))
             } else {
@@ -225,7 +235,7 @@ impl Repo for PgRepo {
 
         let sql = format!("{} ORDER BY a.rn LIMIT $1", query);
 
-        println!("sql: {sql}");
+        //        println!("sql: {sql}");
 
         let q = sql_query(sql).bind::<Integer, _>(params.limit as i32);
 

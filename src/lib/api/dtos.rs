@@ -8,6 +8,7 @@ use crate::waves::is_valid_base58;
 pub struct SearchRequest {
     pub ids: Option<Vec<String>>,
     pub ticker: Option<String>,
+    pub label: Option<String>,
     pub search: Option<String>,
     #[serde(default, deserialize_with = "deserialize_optional_bool_from_string")]
     pub smart: Option<bool>,
@@ -26,6 +27,7 @@ impl From<SearchRequest> for crate::services::assets::SearchRequest {
         Self {
             ids: sr.ids,
             ticker: sr.ticker,
+            label: sr.label,
             search: sr.search,
             smart: sr.smart,
             asset_label_in: sr.asset_label_in,

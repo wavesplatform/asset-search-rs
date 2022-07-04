@@ -4,6 +4,7 @@ use serde::Deserialize;
 pub struct SearchRequest {
     pub ids: Option<Vec<String>>,
     pub ticker: Option<String>,
+    pub label: Option<String>,
     pub search: Option<String>,
     pub smart: Option<bool>,
     pub asset_label_in: Option<Vec<String>>,
