@@ -162,7 +162,7 @@ impl From<(&AssetBlockchainData, &Vec<AssetInfoUpdate>)> for AssetBlockchainData
                     cur
                 }
                 AssetInfoUpdate::Ticker(t) => {
-                    cur.ticker = match t.eq("".into()) {
+                    cur.ticker = match t.is_empty() {
                         true => None,
                         false => Some(t.clone())
                     };
