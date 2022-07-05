@@ -699,7 +699,7 @@ where
                 .last();
 
             if let Some(asset_tickers_update) = asset_tickers_update {
-                //@todo rewrite redis cache
+                //@todo may be need to rewrite redis cache
             }
 
             Ok(())
