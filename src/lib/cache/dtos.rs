@@ -161,8 +161,8 @@ impl From<(&AssetBlockchainData, &Vec<AssetInfoUpdate>)> for AssetBlockchainData
                     // It does not need to be handled
                     cur
                 }
-                AssetInfoUpdate::Ticker(_) => {
-                    // It does not need to be handled
+                AssetInfoUpdate::Ticker(t) => {
+                    cur.ticker = Some(t.clone());
                     cur
                 }
                 AssetInfoUpdate::SponsorRegularBalance(regular_balance) => {

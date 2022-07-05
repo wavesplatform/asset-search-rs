@@ -690,6 +690,18 @@ where
                 user_defined_data_cache.set(&asset_id, new_asset_user_defined_data)?;
             }
 
+            let asset_tickers_update = asset_info_updates
+                .iter()
+                .filter_map(|au| match au {
+                    AssetInfoUpdate::Ticker(ticker) => Some(ticker),
+                    _ => None,
+                })
+                .last();
+
+            if let Some(asset_tickers_update) = asset_tickers_update {
+                //@todo rewrite redis cache
+            }
+
             Ok(())
         })?;
 
@@ -2013,6 +2025,8 @@ fn asset_info_updates_from_asset_tickers_update(
                 acc.insert(update.asset_id.clone(), asset_info_update);
                 acc
             });
+
+    dbg!(&asset_info_updates);
 
     Ok(asset_info_updates)
 }
