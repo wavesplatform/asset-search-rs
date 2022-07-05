@@ -60,7 +60,6 @@ impl From<&crate::models::AssetInfo> for AssetBlockchainData {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AssetUserDefinedData {
     pub asset_id: String,
-    pub ticker: Option<String>,
     pub labels: Vec<String>,
 }
 
@@ -68,7 +67,6 @@ impl AssetUserDefinedData {
     pub fn new(asset_id: impl AsRef<str>) -> Self {
         Self {
             asset_id: asset_id.as_ref().to_owned(),
-            ticker: None,
             labels: Vec::<String>::new(),
         }
     }
@@ -83,7 +81,6 @@ impl AssetUserDefinedData {
         };
         Self {
             asset_id: self.asset_id.clone(),
-            ticker: self.ticker.clone(),
             labels: labels.into_iter().collect::<Vec<_>>(),
         }
     }
@@ -97,7 +94,6 @@ impl AssetUserDefinedData {
 
         Self {
             asset_id: self.asset_id.clone(),
-            ticker: self.ticker.clone(),
             labels,
         }
     }
@@ -115,7 +111,7 @@ impl From<(&AssetBlockchainData, &AssetUserDefinedData)> for AssetInfo {
 
         Self {
             asset: Asset {
-                ticker: user_defined_data.ticker.clone(),
+                ticker: blockchain_data.ticker.clone(),
                 id: blockchain_data.id.clone(),
                 name: blockchain_data.name.clone(),
                 precision: blockchain_data.precision.clone(),

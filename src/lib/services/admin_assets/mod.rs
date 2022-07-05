@@ -54,13 +54,11 @@ impl Service for AdminAssetsService {
                 AssetUserDefinedData {
                     asset_id,
                     labels: labels.into_iter().collect::<Vec<_>>(),
-                    ticker: cached_data.ticker,
                 }
             } else {
                 AssetUserDefinedData {
                     asset_id,
                     labels: vec![label],
-                    ticker: None,
                 }
             };
 
@@ -95,16 +93,11 @@ impl Service for AdminAssetsService {
                     .filter(|l| *l != label)
                     .collect::<Vec<_>>();
 
-                AssetUserDefinedData {
-                    asset_id,
-                    labels,
-                    ticker: cached_data.ticker,
-                }
+                AssetUserDefinedData { asset_id, labels }
             } else {
                 AssetUserDefinedData {
                     asset_id,
                     labels: vec![],
-                    ticker: None,
                 }
             };
 

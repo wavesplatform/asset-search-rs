@@ -138,7 +138,6 @@ impl From<&UserDefinedData> for AssetUserDefinedData {
         let labels = d.labels.clone().into_iter().collect::<Vec<_>>();
         Self {
             asset_id: d.asset_id.clone(),
-            ticker: d.ticker.clone(),
             labels,
         }
     }

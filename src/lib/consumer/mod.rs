@@ -654,7 +654,6 @@ where
                     Some(cached) => cached,
                     _ => AssetUserDefinedData {
                         asset_id: asset_id.clone(),
-                        ticker: None,
                         labels: vec![],
                     },
                 };
@@ -1761,7 +1760,6 @@ where
                 Some(cached) => cached.to_owned(),
                 _ => AssetUserDefinedData {
                     asset_id: asset_id.to_string(),
-                    ticker: None,
                     labels: vec![],
                 },
             };
