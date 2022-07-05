@@ -162,7 +162,11 @@ impl From<(&AssetBlockchainData, &Vec<AssetInfoUpdate>)> for AssetBlockchainData
                     cur
                 }
                 AssetInfoUpdate::Ticker(t) => {
-                    cur.ticker = Some(t.clone());
+                    cur.ticker = match t.eq("".into()) {
+                        true => None,
+                        false => Some(t.clone())
+                    };
+                    
                     cur
                 }
                 AssetInfoUpdate::SponsorRegularBalance(regular_balance) => {
