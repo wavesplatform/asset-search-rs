@@ -2026,7 +2026,7 @@ fn asset_info_updates_from_asset_tickers_update(
                 acc
             });
 
-    dbg!(&asset_info_updates);
+    //    dbg!(&asset_info_updates);
 
     Ok(asset_info_updates)
 }

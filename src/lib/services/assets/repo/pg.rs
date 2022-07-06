@@ -116,14 +116,26 @@ impl Repo for PgRepo {
             // UNION
             let search_by_name_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN (ast.ticker IS NULL or ast.ticker = '') THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND a.name ILIKE '{}%'", min_block_uid_subquery, search, MAX_UID, MAX_UID, false, search_escaped_for_like);
 
-            let search_query = vec![
+            let search_query_vec = vec![
                 search_by_id_query,
                 search_by_meta_query,
                 search_by_ticker_query,
                 search_by_tsquery_query,
                 search_by_name_query,
-            ]
-            .join("\n UNION \n");
+            ];
+
+            match params.label.as_ref() {
+                Some(LabelFilter::One(label)) => {
+                    let label = utils::pg_escape(label);
+                    conditions.push(format!("'{}' = ANY(labels)", label));
+                }
+                Some(LabelFilter::Any) => {
+                    conditions.push(format!("array_length(labels,1) > 0"));
+                }
+                None => {}
+            }
+
+            let search_query = search_query_vec.join("\n UNION \n");
 
             let conditions = if conditions.len() > 0 {
                 format!("WHERE {}", conditions.iter().join(" AND "))
@@ -235,7 +247,7 @@ impl Repo for PgRepo {
 
         let sql = format!("{} ORDER BY a.rn LIMIT $1", query);
 
-        //        println!("sql: {sql}");
+        println!("sql: {sql}");
 
         let q = sql_query(sql).bind::<Integer, _>(params.limit as i32);
 
