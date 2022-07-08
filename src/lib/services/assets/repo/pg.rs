@@ -247,7 +247,7 @@ impl Repo for PgRepo {
 
         let sql = format!("{} ORDER BY a.rn LIMIT $1", query);
 
-        println!("sql: {sql}");
+        //println!("sql: {sql}");
 
         let q = sql_query(sql).bind::<Integer, _>(params.limit as i32);
 

@@ -162,9 +162,11 @@ impl From<(&AssetBlockchainData, &Vec<AssetInfoUpdate>)> for AssetBlockchainData
                     cur
                 }
                 AssetInfoUpdate::Ticker(t) => {
-                    cur.ticker = match t.is_empty() {
-                        true => None,
-                        false => Some(t.clone())
+                    cur.ticker = 
+                    if t.is_empty() {
+                        None
+                    } else {
+                        Some(t.clone())
                     };
                     
                     cur

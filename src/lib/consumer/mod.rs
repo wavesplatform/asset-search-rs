@@ -690,18 +690,6 @@ where
                 user_defined_data_cache.set(&asset_id, new_asset_user_defined_data)?;
             }
 
-            let asset_tickers_update = asset_info_updates
-                .iter()
-                .filter_map(|au| match au {
-                    AssetInfoUpdate::Ticker(ticker) => Some(ticker),
-                    _ => None,
-                })
-                .last();
-
-            if let Some(asset_tickers_update) = asset_tickers_update {
-                //@todo may be need to rewrite redis cache
-            }
-
             Ok(())
         })?;
 
