@@ -6,7 +6,6 @@ use std::convert::TryFrom;
 use crate::error::Error as AppError;
 use crate::models::{
     Asset, AssetInfo, AssetInfoUpdate, AssetMetadata, AssetOracleDataEntry, AssetSponsorBalance,
-    VerificationStatus,
 };
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
@@ -21,6 +20,7 @@ pub enum InvalidateCacheMode {
 pub struct AssetBlockchainData {
     pub id: String,
     pub name: String,
+    pub ticker: Option<String>,
     pub precision: i32,
     pub description: String,
     pub height: i32,
@@ -40,6 +40,7 @@ impl From<&crate::models::AssetInfo> for AssetBlockchainData {
         Self {
             id: a.asset.id.clone(),
             name: a.asset.name.clone(),
+            ticker: a.asset.ticker.clone(),
             precision: a.asset.precision,
             description: a.asset.description.clone(),
             height: a.asset.height,
@@ -59,8 +60,6 @@ impl From<&crate::models::AssetInfo> for AssetBlockchainData {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AssetUserDefinedData {
     pub asset_id: String,
-    pub ticker: Option<String>,
-    pub verification_status: VerificationStatus,
     pub labels: Vec<String>,
 }
 
@@ -68,8 +67,6 @@ impl AssetUserDefinedData {
     pub fn new(asset_id: impl AsRef<str>) -> Self {
         Self {
             asset_id: asset_id.as_ref().to_owned(),
-            ticker: None,
-            verification_status: VerificationStatus::default(),
             labels: Vec::<String>::new(),
         }
     }
@@ -84,8 +81,6 @@ impl AssetUserDefinedData {
         };
         Self {
             asset_id: self.asset_id.clone(),
-            ticker: self.ticker.clone(),
-            verification_status: self.verification_status.clone(),
             labels: labels.into_iter().collect::<Vec<_>>(),
         }
     }
@@ -99,8 +94,6 @@ impl AssetUserDefinedData {
 
         Self {
             asset_id: self.asset_id.clone(),
-            ticker: self.ticker.clone(),
-            verification_status: self.verification_status.clone(),
             labels,
         }
     }
@@ -118,7 +111,7 @@ impl From<(&AssetBlockchainData, &AssetUserDefinedData)> for AssetInfo {
 
         Self {
             asset: Asset {
-                ticker: user_defined_data.ticker.clone(),
+                ticker: blockchain_data.ticker.clone(),
                 id: blockchain_data.id.clone(),
                 name: blockchain_data.name.clone(),
                 precision: blockchain_data.precision.clone(),
@@ -133,7 +126,6 @@ impl From<(&AssetBlockchainData, &AssetUserDefinedData)> for AssetInfo {
                 nft: blockchain_data.nft,
             },
             metadata: AssetMetadata {
-                verification_status: user_defined_data.verification_status.clone(),
                 labels: user_defined_data.labels.clone(),
                 sponsor_balance,
                 oracles_data: blockchain_data.oracles_data.clone(),
@@ -167,6 +159,16 @@ impl From<(&AssetBlockchainData, &Vec<AssetInfoUpdate>)> for AssetBlockchainData
                 }
                 AssetInfoUpdate::Labels(_) => {
                     // It does not need to be handled
+                    cur
+                }
+                AssetInfoUpdate::Ticker(t) => {
+                    cur.ticker = 
+                    if t.is_empty() {
+                        None
+                    } else {
+                        Some(t.clone())
+                    };
+                    
                     cur
                 }
                 AssetInfoUpdate::SponsorRegularBalance(regular_balance) => {
@@ -214,6 +216,7 @@ impl TryFrom<&Vec<AssetInfoUpdate>> for AssetBlockchainData {
 
     fn try_from(updates: &Vec<AssetInfoUpdate>) -> Result<Self, Self::Error> {
         let mut updates_it = updates.iter();
+
         let base = match updates_it.next() {
             Some(AssetInfoUpdate::Base(base)) => Ok(base),
             _ => Err(AppError::IncosistDataError("Expected BaseAssetInfoUpdate as 1st update for transforming Vec<AssetInfoUpdate> into AssetBlockchainData".to_owned())),
@@ -226,6 +229,7 @@ impl TryFrom<&Vec<AssetInfoUpdate>> for AssetBlockchainData {
             height: base.update_height,
             timestamp: base.updated_at,
             name: base.name.to_owned(),
+            ticker: None,
             description: base.description.to_owned(),
             quantity: base.quantity,
             reissuable: base.reissuable,

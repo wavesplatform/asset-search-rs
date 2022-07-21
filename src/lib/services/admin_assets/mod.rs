@@ -4,20 +4,10 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::cache::{AssetUserDefinedData, AsyncWriteCache};
-use crate::db::enums::VerificationStatusValueType;
 use crate::error::Error as AppError;
-use crate::models::VerificationStatus;
 
 #[async_trait::async_trait]
 pub trait Service {
-    async fn update_verification_status(
-        &self,
-        id: &str,
-        verification_status: &VerificationStatus,
-    ) -> Result<(), AppError>;
-
-    async fn update_ticker(&self, id: &str, ticker: Option<&str>) -> Result<(), AppError>;
-
     async fn add_label(&self, id: &str, label: &str) -> Result<(), AppError>;
 
     async fn delete_label(&self, id: &str, label: &str) -> Result<(), AppError>;
@@ -42,86 +32,6 @@ impl AdminAssetsService {
 
 #[async_trait::async_trait]
 impl Service for AdminAssetsService {
-    async fn update_verification_status(
-        &self,
-        id: &str,
-        verification_status: &VerificationStatus,
-    ) -> Result<(), AppError> {
-        let vs = VerificationStatusValueType::from(verification_status);
-        if self
-            .repo
-            .set_verification_status(id, &vs)
-            .map_err(|e| AppError::DbError(e.to_string()))?
-        {
-            let asset_user_defined_data = if let Some(cached_data) = self
-                .user_defined_data_cache
-                .get(id)
-                .await
-                .map_err(|e| AppError::CacheError(format!("{}", e)))?
-            {
-                AssetUserDefinedData {
-                    asset_id: id.to_owned(),
-                    verification_status: verification_status.to_owned(),
-                    ticker: cached_data.ticker,
-                    labels: cached_data.labels,
-                }
-            } else {
-                AssetUserDefinedData {
-                    asset_id: id.to_owned(),
-                    verification_status: verification_status.to_owned(),
-                    ticker: None,
-                    labels: vec![],
-                }
-            };
-
-            self.user_defined_data_cache
-                .set(id.to_owned(), asset_user_defined_data)
-                .await?;
-
-            Ok(())
-        } else {
-            Err(AppError::ConsistencyError("Asset not found".to_owned()))
-        }
-    }
-
-    async fn update_ticker(&self, id: &str, ticker: Option<&str>) -> Result<(), AppError> {
-        if self
-            .repo
-            .update_ticker(id, ticker)
-            .map_err(|err| AppError::DbError(err.to_string()))?
-        {
-            let ticker = ticker.map(|s| s.to_owned());
-            let asset_user_defined_data = if let Some(cached_data) = self
-                .user_defined_data_cache
-                .get(id)
-                .await
-                .map_err(|e| AppError::CacheError(format!("{}", e)))?
-            {
-                AssetUserDefinedData {
-                    asset_id: id.to_owned(),
-                    ticker,
-                    verification_status: cached_data.verification_status,
-                    labels: cached_data.labels,
-                }
-            } else {
-                AssetUserDefinedData {
-                    asset_id: id.to_owned(),
-                    ticker,
-                    verification_status: VerificationStatus::default(),
-                    labels: vec![],
-                }
-            };
-
-            self.user_defined_data_cache
-                .set(id.to_owned(), asset_user_defined_data)
-                .await?;
-
-            Ok(())
-        } else {
-            Err(AppError::ConsistencyError("Asset not found".to_owned()))
-        }
-    }
-
     async fn add_label(&self, id: &str, label: &str) -> Result<(), AppError> {
         if self
             .repo
@@ -144,15 +54,11 @@ impl Service for AdminAssetsService {
                 AssetUserDefinedData {
                     asset_id,
                     labels: labels.into_iter().collect::<Vec<_>>(),
-                    ticker: cached_data.ticker,
-                    verification_status: cached_data.verification_status,
                 }
             } else {
                 AssetUserDefinedData {
                     asset_id,
                     labels: vec![label],
-                    ticker: None,
-                    verification_status: VerificationStatus::default(),
                 }
             };
 
@@ -187,18 +93,11 @@ impl Service for AdminAssetsService {
                     .filter(|l| *l != label)
                     .collect::<Vec<_>>();
 
-                AssetUserDefinedData {
-                    asset_id,
-                    labels,
-                    ticker: cached_data.ticker,
-                    verification_status: cached_data.verification_status,
-                }
+                AssetUserDefinedData { asset_id, labels }
             } else {
                 AssetUserDefinedData {
                     asset_id,
                     labels: vec![],
-                    ticker: None,
-                    verification_status: VerificationStatus::default(),
                 }
             };
 

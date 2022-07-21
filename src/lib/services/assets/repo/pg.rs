@@ -6,10 +6,11 @@ use lazy_static::lazy_static;
 use wavesexchange_log::error;
 
 use super::{Asset, AssetId, FindParams, OracleDataEntry, Repo, TickerFilter, UserDefinedData};
-use crate::db::enums::{DataEntryValueTypeMapping, VerificationStatusValueType};
+use crate::db::enums::DataEntryValueTypeMapping;
 use crate::db::PgPool;
 use crate::error::Error as AppError;
 use crate::schema::data_entries;
+use crate::services::assets::repo::LabelFilter;
 
 const MAX_UID: i64 = i64::MAX - 1;
 
@@ -27,13 +28,15 @@ lazy_static! {
         a.min_sponsored_fee,
         a.smart,
         a.nft,
+        ast.ticker,
         CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ib.regular_balance END AS sponsor_regular_balance,
         CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ol.amount END          AS sponsor_out_leasing
         FROM assets AS a
         LEFT JOIN blocks_microblocks bm ON (SELECT min(block_uid) FROM assets WHERE id = a.id) = bm.uid
         LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = {}
         LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = {}
-    ", MAX_UID, MAX_UID);
+        LEFT JOIN asset_tickers ast ON a.id = ast.asset_id AND ast.superseded_by = {}
+    ", MAX_UID, MAX_UID, MAX_UID);
 }
 
 pub struct PgRepo {
@@ -51,28 +54,6 @@ impl Repo for PgRepo {
         // conditions have to be collected before assets_cte_query construction
         // because of difference in searching by text and searching by ticker
         let mut conditions = vec![];
-
-        // Verification Statuses Filtering
-        if let Some(verification_statuses) = &params.verification_status_in {
-            let verification_statuses = verification_statuses
-                .iter()
-                .map(|vs| VerificationStatusValueType::from(vs))
-                .collect_vec();
-
-            let verification_statuses_filter =
-                if verification_statuses.contains(&VerificationStatusValueType::Unknown) {
-                    format!(
-                    "(pv.verification_status IS NULL OR pv.verification_status = ANY(ARRAY[{}]))",
-                    verification_statuses.iter().join(",")
-                )
-                } else {
-                    format!(
-                        "pv.verification_status = ANY(ARRAY[{}])",
-                        verification_statuses.iter().join(",")
-                    )
-                };
-            conditions.push(verification_statuses_filter);
-        }
 
         // AssetLabel Filtering
         if let Some(asset_labels) = params.asset_label_in {
@@ -114,11 +95,11 @@ impl Repo for PgRepo {
 
             let search_escaped_for_like = utils::escape_for_like(&search);
 
-            let search_by_id_query = format!("SELECT a.id, a.smart, ({}) as block_uid, CASE WHEN pv.ticker IS NULL THEN 128 ELSE 256 END AS rank FROM assets AS a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND a.id ILIKE '{}'", min_block_uid_subquery, MAX_UID, false, search_escaped_for_like);
+            let search_by_id_query = format!("SELECT a.id, a.smart, ({}) as block_uid, CASE WHEN (ast.ticker IS NULL or ast.ticker = '') THEN 128 ELSE 256 END AS rank FROM assets AS a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND a.id ILIKE '{}'", min_block_uid_subquery, MAX_UID, MAX_UID, false, search_escaped_for_like);
             // UNION
             let search_by_meta_query = format!("SELECT id, false AS smart, block_uid, ts_rank(to_tsvector('simple', name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN ticker IS NULL THEN 64 ELSE 128 END AS rank FROM asset_metadatas WHERE name ILIKE '{}%'", search, search_escaped_for_like);
             // UNION
-            let search_by_ticker_query = format!("SELECT a.id, a.smart, ({}) as block_uid, 32 AS rank FROM assets AS a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND pv.ticker ILIKE '{}%'", min_block_uid_subquery, MAX_UID, false, search_escaped_for_like);
+            let search_by_ticker_query = format!("SELECT a.id, a.smart, ({}) as block_uid, 32 AS rank FROM assets AS a LEFT JOIN asset_tickers AS ast ON a.id = ast.asset_id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND ast.ticker ILIKE '{}%'", min_block_uid_subquery, MAX_UID, MAX_UID, false, search_escaped_for_like);
             // UNION
             let tsquery_condition = {
                 let search_escaped_for_tsquery = utils::escape_for_tsquery(&search);
@@ -131,18 +112,30 @@ impl Repo for PgRepo {
                     "1=1".to_owned()
                 }
             };
-            let search_by_tsquery_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN pv.ticker IS NULL THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND {}", min_block_uid_subquery, search, MAX_UID, false, tsquery_condition);
+            let search_by_tsquery_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN (ast.ticker IS NULL or ast.ticker = '') THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND {}", min_block_uid_subquery, search, MAX_UID, MAX_UID, false, tsquery_condition);
             // UNION
-            let search_by_name_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN pv.ticker IS NULL THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id WHERE a.superseded_by = {} AND a.nft = {} AND a.name ILIKE '{}%'", min_block_uid_subquery, search, MAX_UID, false, search_escaped_for_like);
+            let search_by_name_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN (ast.ticker IS NULL or ast.ticker = '') THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND a.name ILIKE '{}%'", min_block_uid_subquery, search, MAX_UID, MAX_UID, false, search_escaped_for_like);
 
-            let search_query = vec![
+            let search_query_vec = vec![
                 search_by_id_query,
                 search_by_meta_query,
                 search_by_ticker_query,
                 search_by_tsquery_query,
                 search_by_name_query,
-            ]
-            .join(" UNION ");
+            ];
+
+            match params.label.as_ref() {
+                Some(LabelFilter::One(label)) => {
+                    let label = utils::pg_escape(label);
+                    conditions.push(format!("'{}' = ANY(labels)", label));
+                }
+                Some(LabelFilter::Any) => {
+                    conditions.push(format!("array_length(labels,1) > 0"));
+                }
+                None => {}
+            }
+
+            let search_query = search_query_vec.join("\n UNION \n");
 
             let conditions = if conditions.len() > 0 {
                 format!("WHERE {}", conditions.iter().join(" AND "))
@@ -157,7 +150,6 @@ impl Repo for PgRepo {
                 FROM
                     ({}) AS search
                 LEFT JOIN assets AS a ON a.id = search.id AND a.superseded_by = {}
-                LEFT JOIN predefined_verifications AS pv ON pv.asset_id = search.id
                 LEFT JOIN (
                     SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
                     FROM (
@@ -184,10 +176,23 @@ impl Repo for PgRepo {
                 match ticker {
                     TickerFilter::One(ticker) => {
                         let ticker = utils::pg_escape(ticker);
-                        conditions.push(format!("pv.ticker = '{}'", ticker));
+                        conditions.push(format!("ast.ticker = '{}'", ticker));
                     }
                     TickerFilter::Any => {
-                        conditions.push(format!("pv.ticker IS NOT NULL"));
+                        conditions.push(format!("ast.ticker IS NOT NULL AND ast.ticker != ''"));
+                    }
+                }
+            }
+
+            // search by label only if there is not searching by text
+            if let Some(filter_label) = params.label.as_ref() {
+                match filter_label {
+                    LabelFilter::One(label) => {
+                        let label = utils::pg_escape(label);
+                        conditions.push(format!("'{}' = ANY(labels)", label));
+                    }
+                    LabelFilter::Any => {
+                        conditions.push(format!("array_length(labels,1) > 0"));
                     }
                 }
             }
@@ -204,7 +209,7 @@ impl Repo for PgRepo {
                     ROW_NUMBER() OVER (ORDER BY a.block_uid ASC, a.id ASC) AS rn
                 FROM
                     (SELECT a.id, a.smart, (SELECT min(a1.block_uid) FROM assets a1 WHERE a1.id = a.id) AS block_uid, a.issuer FROM assets AS a WHERE a.superseded_by = {} AND a.nft = {}) AS a
-                LEFT JOIN predefined_verifications AS pv ON pv.asset_id = a.id
+                LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {}
                 LEFT JOIN (
                     SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
                     FROM (
@@ -223,6 +228,7 @@ impl Repo for PgRepo {
                 MAX_UID,
                 false,
                 MAX_UID,
+                MAX_UID,
                 conditions
             )
         };
@@ -239,8 +245,11 @@ impl Repo for PgRepo {
             );
         }
 
-        let q = sql_query(format!("{} ORDER BY a.rn LIMIT $1", query))
-            .bind::<Integer, _>(params.limit as i32);
+        let sql = format!("{} ORDER BY a.rn LIMIT $1", query);
+
+        //println!("sql: {sql}");
+
+        let q = sql_query(sql).bind::<Integer, _>(params.limit as i32);
 
         q.load(&self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
@@ -361,13 +370,13 @@ impl Repo for PgRepo {
 }
 
 fn generate_assets_user_defined_data_base_sql_query() -> String {
-    format!("SELECT 
+    format!(
+        "SELECT 
         a.id as asset_id,
-        pv.ticker,
-        COALESCE(pv.verification_status, 'unknown'::verification_status_value_type) AS verification_status,
+        ast.ticker,
         COALESCE(awl.labels, ARRAY[]::text[])  AS labels
         FROM assets a
-        LEFT JOIN predefined_verifications pv ON a.id = pv.asset_id
+        LEFT JOIN asset_tickers ast ON a.id = ast.asset_id and ast.superseded_by = {}
         LEFT JOIN (
             SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
             FROM (
@@ -381,7 +390,9 @@ fn generate_assets_user_defined_data_base_sql_query() -> String {
             ) AS data, UNNEST(labels) AS labels_list
             GROUP BY asset_id
         ) AS awl ON awl.asset_id = a.id
-    ", MAX_UID)
+    ",
+        MAX_UID, MAX_UID
+    )
 }
 
 mod utils {

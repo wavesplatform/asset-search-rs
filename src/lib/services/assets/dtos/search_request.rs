@@ -1,13 +1,12 @@
-use crate::models::VerificationStatus;
 use serde::Deserialize;
 
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct SearchRequest {
     pub ids: Option<Vec<String>>,
     pub ticker: Option<String>,
+    pub label: Option<String>,
     pub search: Option<String>,
     pub smart: Option<bool>,
-    pub verification_status_in: Option<Vec<VerificationStatus>>,
     pub asset_label_in: Option<Vec<String>>,
     pub issuer_in: Option<Vec<String>>,
     pub limit: u32,

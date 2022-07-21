@@ -1,12 +1,10 @@
 use chrono::{DateTime, Utc};
-use diesel::query_source::joins::{JoinOn, LeftOuter};
 use itertools::Itertools;
 use serde::Serialize;
 use std::collections::HashMap;
 
 use crate::consumer::models::data_entry::DataEntryValue;
-use crate::models::{DataEntryType, VerificationStatus};
-use crate::schema::{asset_wx_labels, assets, predefined_verifications};
+use crate::models::DataEntryType;
 use crate::waves::{parse_waves_association_key, KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES};
 
 use super::dtos::ResponseFormat;
@@ -64,61 +62,12 @@ pub struct AssetMetadata {
     pub labels: Vec<String>,
     pub sponsor_balance: Option<i64>,
     pub has_image: bool,
-    pub verified_status: VerificationStatus,
 }
 
 #[derive(Clone, Debug)]
 pub struct AssetLabel {
     pub asset_id: String,
     pub label: String,
-}
-
-impl diesel::expression::Expression for VerificationStatus {
-    type SqlType = diesel::sql_types::Integer;
-}
-
-impl
-    diesel::expression::AppearsOnTable<
-        JoinOn<
-            diesel::query_source::joins::Join<
-                JoinOn<
-                    diesel::query_source::joins::Join<
-                        assets::table,
-                        predefined_verifications::table,
-                        LeftOuter,
-                    >,
-                    diesel::expression::operators::Eq<
-                        predefined_verifications::columns::asset_id,
-                        assets::columns::id,
-                    >,
-                >,
-                asset_wx_labels::table,
-                LeftOuter,
-            >,
-            diesel::expression::operators::Eq<
-                asset_wx_labels::columns::asset_id,
-                assets::columns::id,
-            >,
-        >,
-    > for VerificationStatus
-{
-}
-
-impl diesel::query_builder::QueryFragment<diesel::pg::Pg> for VerificationStatus {
-    fn walk_ast(
-        &self,
-        mut out: diesel::query_builder::AstPass<diesel::pg::Pg>,
-    ) -> diesel::QueryResult<()> {
-        let s = match self.clone() {
-            VerificationStatus::Declined => -1,
-            VerificationStatus::Unknown => 0,
-            VerificationStatus::Verified => 1,
-        };
-
-        out.push_bind_param::<diesel::sql_types::Integer, _>(&s)?;
-
-        Ok(())
-    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -215,7 +164,6 @@ impl Asset {
                             _ => sb.regular_balance,
                         }
                     }),
-                    verified_status: asset_info.metadata.verification_status,
                 };
                 Self {
                     data: Some(ai),

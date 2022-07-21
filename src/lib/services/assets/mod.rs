@@ -14,7 +14,7 @@ use crate::error::Error as AppError;
 use crate::models::AssetInfo;
 
 use entities::UserDefinedData;
-use repo::{FindParams, TickerFilter};
+use repo::{FindParams, LabelFilter, TickerFilter};
 
 #[derive(Clone, Debug, Default)]
 pub struct GetOptions {
@@ -172,6 +172,8 @@ impl Service for AssetsService {
         ids: &[&str],
         opts: &MgetOptions,
     ) -> Result<Vec<Option<AssetInfo>>, AppError> {
+        dbg!("AssetsService:mget");
+
         let assets = match opts.height {
             Some(height) => {
                 let assets = {
@@ -224,9 +226,6 @@ impl Service for AssetsService {
                                     &asset_oracles_data,
                                 )?;
 
-                            // user defined data exists for all existing assets
-                            // at least as unknown verification_status
-                            // therefore unwrap-safety is guaranteed
                             let asset_user_defined_data =
                                 assets_user_defined_data.get(&a.id).unwrap();
 
@@ -399,8 +398,14 @@ impl Service for AssetsService {
                     TickerFilter::One(ticker.to_owned())
                 }
             }),
+            label: req.label.as_ref().map(|label| {
+                if label.as_str() == "*" {
+                    LabelFilter::Any
+                } else {
+                    LabelFilter::One(label.to_owned())
+                }
+            }),
             smart: req.smart,
-            verification_status_in: req.verification_status_in.clone(),
             asset_label_in: req.asset_label_in.clone(),
             issuer_in: req.issuer_in.clone(),
             after: req.after.clone(),
