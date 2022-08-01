@@ -50,6 +50,8 @@ pub enum Error {
     IncosistDataError(String),
     #[error("Bb8RunError: {0}")]
     Bb8RunError(String),
+    #[error("Request error: {0}")]
+    ApiCustomError(String),
 }
 
 impl Reject for Error {}
