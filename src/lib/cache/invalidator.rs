@@ -52,12 +52,8 @@ where
             all_assets_blockchain_data.append(&mut assets_blockchain_data);
 
             if assets_blockchain_data_ids.len() as u32 >= REQUEST_LIMIT {
-                let last = assets_blockchain_data_ids
-                    .last()
-                    .cloned()
-                    .unwrap()
-                    .to_owned();
-                req = req.with_after(last);
+                let last = assets_blockchain_data_ids.last().cloned().unwrap();
+                req = req.with_after(last.to_owned());
             } else {
                 break;
             }
