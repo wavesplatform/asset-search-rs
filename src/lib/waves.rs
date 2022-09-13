@@ -109,6 +109,7 @@ pub fn is_valid_base58(src: &str) -> bool {
 pub const WAVES_ID: &str = "WAVES";
 pub const WAVES_NAME: &str = "Waves";
 pub const WAVES_PRECISION: i32 = 8;
+pub const WAVES_DESCR: &str = "Waves is a blockchain ecosystem that offers comprehensive and effective blockchain-based tools for businesses, individuals and developers. Waves Platform offers unprecedented throughput and flexibility. Features include the LPoS consensus algorithm, Waves-NG protocol and advanced smart contract functionality.";
 
 pub fn get_asset_id<I: AsRef<[u8]>>(input: I) -> String {
     if input.as_ref().is_empty() {
