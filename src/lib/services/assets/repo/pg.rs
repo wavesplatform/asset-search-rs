@@ -68,7 +68,7 @@ impl Repo for PgRepo {
                     "awl.labels && ARRAY[{}]",
                     asset_labels
                         .iter()
-                        .map(|label| format!("'{}'", label))
+                        .map(|label| format!("'{}'", utils::pg_escape(&label)))
                         .join(",")
                 );
                 label_filters.push(labels_filter);
@@ -84,7 +84,10 @@ impl Repo for PgRepo {
         if let Some(issuer_in) = params.issuer_in {
             conditions.push(format!(
                 "a.issuer = ANY(ARRAY[{}])",
-                issuer_in.iter().map(|addr| format!("'{}'", addr)).join(",")
+                issuer_in
+                    .iter()
+                    .map(|addr| format!("'{}'", utils::pg_escape(&addr)))
+                    .join(",")
             ));
         }
 
@@ -175,8 +178,7 @@ impl Repo for PgRepo {
             if let Some(ticker) = params.ticker.as_ref() {
                 match ticker {
                     TickerFilter::One(ticker) => {
-                        let ticker = utils::pg_escape(ticker);
-                        conditions.push(format!("ast.ticker = '{}'", ticker));
+                        conditions.push(format!("ast.ticker = '{}'", utils::pg_escape(ticker)));
                     }
                     TickerFilter::Any => {
                         conditions.push(format!("ast.ticker IS NOT NULL AND ast.ticker != ''"));
@@ -188,8 +190,7 @@ impl Repo for PgRepo {
             if let Some(filter_label) = params.label.as_ref() {
                 match filter_label {
                     LabelFilter::One(label) => {
-                        let label = utils::pg_escape(label);
-                        conditions.push(format!("'{}' = ANY(labels)", label));
+                        conditions.push(format!("'{}' = ANY(labels)", utils::pg_escape(&label)));
                     }
                     LabelFilter::Any => {
                         conditions.push(format!("array_length(labels,1) > 0"));
@@ -241,7 +242,8 @@ impl Repo for PgRepo {
         if let Some(after) = params.after {
             query = format!(
                 "{} WHERE a.rn > (SELECT rn FROM assets_cte WHERE id = '{}')",
-                query, after
+                query,
+                utils::pg_escape(&after)
             );
         }
 

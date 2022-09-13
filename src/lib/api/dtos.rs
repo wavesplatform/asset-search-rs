@@ -6,16 +6,20 @@ use crate::waves::is_valid_base58;
 
 #[derive(Clone, Debug, Deserialize, Validate)]
 pub struct SearchRequest {
+    #[validate(custom = "validate_vec_base58")]
     pub ids: Option<Vec<String>>,
+    #[validate(custom = "validate_sql_valid")]
     pub ticker: Option<String>,
+    #[validate(custom = "validate_sql_valid")]
     pub label: Option<String>,
     pub search: Option<String>,
     #[serde(default, deserialize_with = "deserialize_optional_bool_from_string")]
     pub smart: Option<bool>,
     #[serde(rename = "label__in")]
+    #[validate(custom = "validate_vec_sql_valid")]
     pub asset_label_in: Option<Vec<String>>,
     #[serde(rename = "issuer__in")]
-    #[validate(custom = "validate_issuer_in")]
+    #[validate(custom = "validate_vec_base58")]
     pub issuer_in: Option<Vec<String>>,
     #[validate(range(max = 100))]
     pub limit: Option<u32>,
@@ -33,12 +37,29 @@ impl From<SearchRequest> for crate::services::assets::SearchRequest {
             asset_label_in: sr.asset_label_in,
             limit: sr.limit.unwrap_or(DEFAULT_LIMIT),
             issuer_in: sr.issuer_in,
-            after: sr.after,
+            after: sr.after.clone(),
         }
     }
 }
+fn validate_sql_valid(value: &String) -> Result<(), ValidationError> {
+    if value
+        .chars()
+        .all(|c| char::is_alphanumeric(c) || c == '_' || c == '*')
+    {
+        Ok(())
+    } else {
+        Err(ValidationError::new("Got invalid alphanumeric string"))
+    }
+}
 
-fn validate_issuer_in(issuers: &Vec<String>) -> Result<(), ValidationError> {
+fn validate_vec_sql_valid(labels: &Vec<String>) -> Result<(), ValidationError> {
+    for label in labels {
+        validate_sql_valid(label)?
+    }
+    Ok(())
+}
+
+fn validate_vec_base58(issuers: &Vec<String>) -> Result<(), ValidationError> {
     issuers.iter().fold(Ok(()), |_, addr| {
         if !is_valid_base58(addr) {
             Err(ValidationError::new("Got invalid base58 string"))

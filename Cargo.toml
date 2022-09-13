@@ -1,6 +1,6 @@
 [package]
 name = "asset-search-rs"
-version = "1.3.2"
+version = "2.0.1"
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -41,7 +41,7 @@ tonic = "0.5"
 validator = { version = "0.14", features = ["derive"] }
 warp = { version = "0.3.2", default-features = false }
 wavesexchange_log = { git = "https://github.com/waves-exchange/wavesexchange-rs", tag = "wavesexchange_log/0.5.0" }
-wavesexchange_warp = { git = "https://github.com/waves-exchange/wavesexchange-rs", tag = "wavesexchange_warp/0.12.3" }
+wavesexchange_warp = { git = "https://github.com/waves-exchange/wavesexchange-rs", tag = "wavesexchange_warp/0.13.1" }
 waves-protobuf-schemas = { git = "https://github.com/wavesplatform/protobuf-schemas", rev = "50827749d9422b47a79c4e858f2a560d785d7fb8" }
 
 [lib]

@@ -9,7 +9,10 @@ use wavesexchange_log::{debug, error, info};
 use wavesexchange_warp::error::{
     error_handler_with_serde_qs, handler, internal, timeout, validation,
 };
-use wavesexchange_warp::log::access;
+use wavesexchange_warp::{
+    endpoints::{livez, readyz, startz},
+    log::access,
+};
 
 use super::dtos::{escape_querystring_field, MgetRequest, RequestOptions, SearchRequest};
 use super::models::{Asset, AssetInfo, List};
@@ -101,7 +104,10 @@ pub async fn start(
 
     info!("Starting API server at 0.0.0.0:{}", port);
 
-    let routes = assets_get_handler
+    let routes = livez()
+        .or(readyz())
+        .or(startz())
+        .or(assets_get_handler)
         .or(assets_post_handler)
         .recover(move |rej| {
             error!("{:?}", rej);
