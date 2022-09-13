@@ -5,13 +5,14 @@ pub mod repo;
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::Arc;
-use wavesexchange_log::timer;
+use wavesexchange_log::{timer, warn};
 
 pub use self::dtos::SearchRequest;
 use crate::cache;
 use crate::cache::{AssetBlockchainData, AssetUserDefinedData};
 use crate::error::Error as AppError;
 use crate::models::AssetInfo;
+use crate::waves::{WAVES_DESCR, WAVES_ID};
 
 use entities::UserDefinedData;
 use repo::{FindParams, LabelFilter, TickerFilter};
@@ -360,7 +361,7 @@ impl Service for AssetsService {
                         })
                 };
 
-                let assets =
+                let mut assets =
                     assets_blockchain_data
                         .into_iter()
                         .fold(HashMap::new(), |mut acc, cur| {
@@ -372,6 +373,13 @@ impl Service for AssetsService {
                             }
                             acc
                         });
+
+                if let Some(asset) = assets.get_mut(WAVES_ID) {
+                    if asset.asset.description != "" {
+                        warn!("Ignoring description of WAVES asset stored in database: {}", asset.asset.description);
+                    }
+                    asset.asset.description = WAVES_DESCR.to_owned();
+                }
 
                 ids.iter()
                     .map(|id| assets.get(*id).cloned())
