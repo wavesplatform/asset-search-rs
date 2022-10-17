@@ -54,12 +54,14 @@ async fn main() -> Result<()> {
     };
 
     let port = admin_config.api.port;
+    let metrics_port = admin_config.api.metrics_port;
     let api_key = admin_config.admin.api_key.to_owned();
 
     if admin_config.api.image_service_bypass {
         info!("Bypassing Images service");
         admin::server::start(
             port,
+            metrics_port,
             assets_service,
             app_lib::services::images::dummy::DummyService::new(),
             admin_assets_service,
@@ -78,6 +80,7 @@ async fn main() -> Result<()> {
 
         admin::server::start(
             port,
+            metrics_port,
             assets_service,
             images_service,
             admin_assets_service,

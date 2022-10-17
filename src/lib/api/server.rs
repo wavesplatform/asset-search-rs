@@ -12,6 +12,7 @@ use wavesexchange_warp::error::{
 use wavesexchange_warp::{
     endpoints::{livez, readyz, startz},
     log::access,
+    MetricsWarpBuilder,
 };
 
 use super::dtos::{escape_querystring_field, MgetRequest, RequestOptions, SearchRequest};
@@ -23,6 +24,7 @@ use crate::services::assets::MgetOptions;
 
 pub async fn start(
     port: u16,
+    metrics_port: u16,
     assets_service: impl services::assets::Service + Send + Sync + 'static,
     images_service: impl services::images::Service + Send + Sync + 'static,
 ) {
@@ -115,7 +117,12 @@ pub async fn start(
         })
         .with(log);
 
-    warp::serve(routes).run(([0, 0, 0, 0], port)).await;
+    MetricsWarpBuilder::new()
+        .with_main_routes(routes)
+        .with_metrics_port(metrics_port)
+        .with_main_routes_port(port)
+        .run_blocking()
+        .await;
 }
 
 async fn assets_get_controller(

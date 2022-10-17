@@ -7,6 +7,7 @@ use wavesexchange_warp::error::{
     authorization, error_handler_with_serde_qs, handler, internal, timeout, validation,
 };
 use wavesexchange_warp::log::access;
+use wavesexchange_warp::MetricsWarpBuilder;
 
 use super::InvalidateCacheQueryParams;
 use crate::api::{dtos::ResponseFormat, models::Asset};
@@ -22,6 +23,7 @@ const DEFAULT_FORMAT: ResponseFormat = ResponseFormat::Full;
 
 pub async fn start(
     port: u16,
+    metrics_port: u16,
     assets_service: impl services::assets::Service + Send + Sync + 'static,
     images_service: impl services::images::Service + Send + Sync + 'static,
     admin_assets_service: impl services::admin_assets::Service + Send + Sync + 'static,
@@ -187,7 +189,12 @@ pub async fn start(
         })
         .with(log);
 
-    warp::serve(routes).run(([0, 0, 0, 0], port)).await;
+    MetricsWarpBuilder::new()
+        .with_main_routes(routes)
+        .with_main_routes_port(port)
+        .with_metrics_port(metrics_port)
+        .run_blocking()
+        .await;
 }
 
 async fn asset_add_label_controller(

@@ -41,7 +41,7 @@ tonic = "0.5"
 validator = { version = "0.14", features = ["derive"] }
 warp = { version = "0.3", default-features = false }
 wavesexchange_log = { git = "https://github.com/waves-exchange/wavesexchange-rs", tag = "wavesexchange_log/0.5.0" }
-wavesexchange_warp = { git = "https://github.com/waves-exchange/wavesexchange-rs", tag = "wavesexchange_warp/0.14.0", version = "0.14.0" }
+wavesexchange_warp = { git = "https://github.com/waves-exchange/wavesexchange-rs", tag = "wavesexchange_warp/0.14.1" }
 waves-protobuf-schemas = { git = "https://github.com/wavesplatform/protobuf-schemas", rev = "50827749d9422b47a79c4e858f2a560d785d7fb8" }
 
 [lib]
@@ -55,7 +55,7 @@ path = "src/bin/api.rs"
 [[bin]]
 name = "admin"
 path = "src/bin/admin.rs"
-
+ 
 [[bin]]
 name = "consumer"
 path = "src/bin/consumer.rs"
