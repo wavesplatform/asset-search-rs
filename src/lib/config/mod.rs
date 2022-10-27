@@ -27,7 +27,6 @@ pub struct AdminConfig {
 
 #[derive(Debug, Clone)]
 pub struct ConsumerConfig {
-    pub api: api::Config,
     pub consumer: consumer::Config,
     pub postgres: postgres::Config,
     pub redis: redis::Config,
@@ -71,13 +70,11 @@ pub async fn load_admin_config() -> Result<AdminConfig, Error> {
 }
 
 pub async fn load_consumer_config() -> Result<ConsumerConfig, Error> {
-    let api_config = api::load()?;
     let consumer_config = consumer::load()?;
     let postgres_config = postgres::load()?;
     let redis_config = redis::load()?;
 
     Ok(ConsumerConfig {
-        api: api_config,
         consumer: consumer_config,
         postgres: postgres_config,
         redis: redis_config,
