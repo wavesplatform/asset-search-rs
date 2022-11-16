@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
 
     let metrics = MetricsWarpBuilder::new()
         .with_metrics_port(config.consumer.metrics_port)
-        .run_blocking();
+        .run_async();
 
     select! {
         Err(err) = consumer =>

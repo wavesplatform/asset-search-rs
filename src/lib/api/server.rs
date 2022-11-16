@@ -114,7 +114,7 @@ pub async fn start(
         .with_main_routes(routes)
         .with_metrics_port(metrics_port)
         .with_main_routes_port(port)
-        .run_blocking()
+        .run_async()
         .await;
 }
 
