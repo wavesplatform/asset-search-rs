@@ -4,12 +4,11 @@ use diesel::pg::PgConnection;
 use diesel::sql_types::{Array, BigInt, Bool, Text, VarChar};
 use diesel::{prelude::*, sql_query};
 
-use super::super::models::asset::OracleDataEntry;
 use super::super::models::asset_labels::{
     AssetLabels, AssetLabelsOverride, DeletedAssetLabels, InsertableAssetLabels,
 };
 use super::super::models::{
-    asset::{AssetOverride, DeletedAsset, InsertableAsset, QueryableAsset},
+    asset::{AssetOverride, DeletedAsset, InsertableAsset},
     block_microblock::BlockMicroblock,
     data_entry::{DataEntryOverride, DeletedDataEntry, InsertableDataEntry},
     issuer_balance::{
@@ -29,6 +28,7 @@ use crate::schema::{
     assets_uid_seq, blocks_microblocks, data_entries, data_entries_uid_seq, issuer_balances,
     issuer_balances_uid_seq, out_leasings, out_leasings_uid_seq,
 };
+use crate::services::assets::repo::{Asset, OracleDataEntry};
 use crate::tuple_len::TupleLen;
 use crate::waves::WAVES_ID;
 
@@ -279,7 +279,7 @@ impl Repo for PgRepoImpl {
             })
     }
 
-    fn mget_assets(&self, uids: &[i64]) -> Result<Vec<Option<QueryableAsset>>> {
+    fn mget_assets(&self, uids: &[i64]) -> Result<Vec<Option<Asset>>> {
         let q = sql_query("SELECT 
             a.id,
             a.name,
@@ -337,7 +337,7 @@ impl Repo for PgRepoImpl {
         })
     }
 
-    fn issuer_assets(&self, issuer: impl AsRef<str>) -> Result<Vec<QueryableAsset>> {
+    fn issuer_assets(&self, issuer: impl AsRef<str>) -> Result<Vec<Asset>> {
         let q = sql_query("SELECT 
             a.id,
             a.name,
@@ -938,6 +938,51 @@ impl Repo for PgRepoImpl {
             })
             .map_err(|err| {
                 let context = format!("Cannot rollback out leasings: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    //
+    fn data_entries(
+        &self,
+        asset_ids: &[&str],
+        oracle_address: &str,
+    ) -> Result<Vec<OracleDataEntry>> {
+        data_entries::table
+            .select((
+                sql::<Text>("related_asset_id"),
+                data_entries::address,
+                data_entries::key,
+                sql::<DataEntryValueTypeMapping>("data_type"),
+                data_entries::bin_val,
+                data_entries::bool_val,
+                data_entries::int_val,
+                data_entries::str_val,
+            ))
+            .filter(data_entries::superseded_by.eq(MAX_UID))
+            .filter(data_entries::address.eq_all(oracle_address))
+            .filter(data_entries::related_asset_id.eq_any(asset_ids))
+            .filter(data_entries::data_type.is_not_null())
+            .get_results(&self.conn)
+            .map_err(|err| {
+                let context = format!("Cannot get data_entries: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn mget_assets_by_ids(&self, ids: &[&str]) -> Result<Vec<Option<Asset>>> {
+        //use same query from api
+        use crate::services::assets::repo::pg::ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY;
+
+        sql_query(&format!(
+            "{} WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = ANY($2) ORDER BY a.id, a.uid DESC)",
+            ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY.as_str()
+        ))
+        .bind::<BigInt, _>(MAX_UID)
+        .bind::<Array<Text>, _>(ids)
+        .get_results(&self.conn)
+        .map_err(|err| {
+                let context = format!("Cannot get assets data: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
             })
     }

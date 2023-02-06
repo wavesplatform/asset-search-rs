@@ -376,7 +376,10 @@ impl Service for AssetsService {
 
                 if let Some(asset) = assets.get_mut(WAVES_ID) {
                     if asset.asset.description != "" {
-                        warn!("Ignoring description of WAVES asset stored in database: {}", asset.asset.description);
+                        warn!(
+                            "Ignoring description of WAVES asset stored in database: {}",
+                            asset.asset.description
+                        );
                     }
                     asset.asset.description = WAVES_DESCR.to_owned();
                 }

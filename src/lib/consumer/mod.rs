@@ -325,6 +325,15 @@ where
 
         handle_base_asset_info_updates(repo.clone(), &base_asset_info_updates_with_block_uids)?;
 
+        // insert empty redis cache label data to prevent redis cache-miss in api and load assets data from db
+        for a in base_asset_info_updates_with_block_uids.iter() {
+            let udata = AssetUserDefinedData {
+                asset_id: a.1.id.clone(),
+                labels: vec![],
+            };
+            user_defined_data_cache.set(&a.1.id, udata)?;
+        }
+
         info!(
             "handled {} assets updates",
             base_asset_info_updates_with_block_uids.len()
@@ -511,6 +520,7 @@ where
     // 6. Merge updates
     // 7. Get currently cached assets data
     // 8. Invalidate cache
+    // 9. Set new values in cache for non cached assets
 
     // 1.
     let assets_info_updates = base_asset_info_updates_with_block_uids
@@ -613,6 +623,8 @@ where
         );
 
     // 8.
+    let mut not_cached_assets_ids = vec![];
+
     assets_info_updates
         .iter()
         .try_for_each::<_, Result<(), AppError>>(|(asset_id, asset_info_updates)| {
@@ -620,6 +632,7 @@ where
                 "invalidate cache for asset_id {}, asset_info_updates: {:?}",
                 asset_id, asset_info_updates
             );
+
             // Invalidate cached blockchain data
             match cached_blockhain_data
                 .get(asset_id.as_str())
@@ -630,11 +643,7 @@ where
                         AssetBlockchainData::from((cached, asset_info_updates));
                     blockchain_data_cache.set(&asset_id, new_asset_blockchain_data)?;
                 }
-                _ => {
-                    let new_asset_blockchain_data =
-                        AssetBlockchainData::try_from(asset_info_updates)?;
-                    blockchain_data_cache.set(&asset_id, new_asset_blockchain_data)?;
-                }
+                _ => not_cached_assets_ids.push(asset_id.as_str()),
             }
 
             let asset_labels_update = asset_info_updates
@@ -692,6 +701,76 @@ where
 
             Ok(())
         })?;
+
+    // 9.
+    if !not_cached_assets_ids.is_empty() {
+        let assets_oracles_data =
+            repo.data_entries(&not_cached_assets_ids, waves_association_address)?;
+
+        let assets_oracles_data =
+            assets_oracles_data
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, cur| {
+                    let asset_data = acc.entry(cur.asset_id.clone()).or_insert(HashMap::new());
+                    let asset_oracle_data = asset_data
+                        .entry(cur.oracle_address.clone())
+                        .or_insert(vec![]);
+                    let asset_oracle_data_entry = AssetOracleDataEntry::from(&cur);
+                    asset_oracle_data.push(asset_oracle_data_entry);
+                    acc
+                });
+
+        let assets_to_cache = repo.mget_assets_by_ids(&not_cached_assets_ids)?;
+
+        for asset in assets_to_cache.iter().filter(|i| i.is_some()) {
+            let asset = asset.as_ref().unwrap();
+
+            let asset_oracle_data = assets_oracles_data
+                .get(&asset.id)
+                .unwrap_or(&HashMap::new())
+                .clone();
+
+            let asset_from_db = AssetBlockchainData::try_from_asset_and_oracles_data_entry(
+                asset,
+                &asset_oracle_data,
+            )?;
+
+            let asset_updates = assets_info_updates.get(&asset.id);
+
+            let new_asset = match asset_updates {
+                Some(u) => {
+                    let asset_from_updates = AssetBlockchainData::try_from(u);
+
+                    match asset_from_updates {
+                        Ok(a) => Ok(a),
+                        Err(_) => {
+                            let base_update: BaseAssetInfoUpdate = asset_from_db.into();
+                            let mut u = u.clone();
+                            u.insert(0, AssetInfoUpdate::Base(base_update));
+                            AssetBlockchainData::try_from(&u)
+                        }
+                    }
+                }
+                _ => Ok(asset_from_db),
+            };
+
+            match new_asset {
+                Ok(a) => {
+                    info!("update redis cache for asset_blockchain data: {}", &a.id);
+
+                    blockchain_data_cache
+                        .set(&a.id.clone(), a)
+                        .expect("can't set asset data in redis ");
+                }
+                Err(e) => {
+                    panic!(
+                        "error converting AssetBlockchainData::try_from_asset_and_oracles_data: {}",
+                        e
+                    );
+                }
+            }
+        }
+    }
 
     Ok(())
 }

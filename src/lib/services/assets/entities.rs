@@ -9,7 +9,7 @@ use crate::{
     cache::{AssetBlockchainData, AssetUserDefinedData},
     db::enums::DataEntryValueType,
     error::Error as AppError,
-    models::{AssetOracleDataEntry, AssetSponsorBalance, DataEntryType},
+    models::{AssetOracleDataEntry, AssetSponsorBalance, BaseAssetInfoUpdate, DataEntryType},
 };
 
 #[derive(Clone, Debug, QueryableByName)]
@@ -46,6 +46,58 @@ pub struct Asset {
     pub ticker: Option<String>,
 }
 
+impl From<&Asset> for BaseAssetInfoUpdate {
+    fn from(a: &Asset) -> Self {
+        Self {
+            id: a.id.clone(),
+            issuer: a.issuer.clone(),
+            precision: a.precision,
+            update_height: a.height,
+            updated_at: a.timestamp.clone(),
+            name: a.name.clone(),
+            description: a.description.clone(),
+            smart: a.smart,
+            nft: a.nft,
+            quantity: a.quantity,
+            reissuable: a.reissuable,
+            min_sponsored_fee: a.min_sponsored_fee,
+        }
+    }
+}
+
+impl AssetBlockchainData {
+    pub fn from_asset_and_oracles_data(
+        asset: &Asset,
+        oracles_data: &HashMap<String, Vec<AssetOracleDataEntry>>,
+    ) -> Self {
+        Self {
+            id: asset.id.clone(),
+            name: asset.name.clone(),
+            ticker: asset.ticker.clone(),
+            precision: asset.precision,
+            description: asset.description.clone(),
+            height: asset.height,
+            timestamp: asset.timestamp,
+            issuer: asset.issuer.clone(),
+            quantity: asset.quantity,
+            reissuable: asset.reissuable,
+            min_sponsored_fee: asset.min_sponsored_fee,
+            smart: asset.smart,
+            nft: asset.nft,
+            oracles_data: oracles_data.to_owned(),
+            sponsor_balance: if asset.min_sponsored_fee.is_some() {
+                asset
+                    .sponsor_regular_balance
+                    .map(|srb| AssetSponsorBalance {
+                        regular_balance: srb,
+                        out_leasing: asset.sponsor_out_leasing,
+                    })
+            } else {
+                None
+            },
+        }
+    }
+}
 #[derive(Clone, Debug, Queryable)]
 pub struct OracleDataEntry {
     pub asset_id: String,
@@ -117,6 +169,45 @@ impl AssetBlockchainData {
                     (oracle_address.to_owned(), des)
                 })
                 .collect(),
+        };
+
+        Ok(asset_blockchain_data)
+    }
+
+    pub fn try_from_asset_and_oracles_data_entry(
+        asset: &Asset,
+        oracles_data: &HashMap<String, Vec<AssetOracleDataEntry>>,
+    ) -> Result<Self, AppError> {
+        let sponsor_balance = if asset.min_sponsored_fee.is_some() {
+            Some(AssetSponsorBalance {
+                regular_balance: asset.sponsor_regular_balance.ok_or(
+                    AppError::ConsistencyError(format!(
+                        "Expected asset {} sponsor ({}) regular balance",
+                        asset.id, asset.issuer
+                    )),
+                )?,
+                out_leasing: asset.sponsor_out_leasing,
+            })
+        } else {
+            None
+        };
+
+        let asset_blockchain_data = Self {
+            id: asset.id.clone(),
+            name: asset.name.clone(),
+            ticker: asset.ticker.clone(),
+            precision: asset.precision,
+            description: asset.description.clone(),
+            height: asset.height,
+            timestamp: asset.timestamp,
+            issuer: asset.issuer.clone(),
+            quantity: asset.quantity,
+            reissuable: asset.reissuable,
+            min_sponsored_fee: asset.min_sponsored_fee,
+            smart: asset.smart,
+            nft: asset.nft,
+            sponsor_balance,
+            oracles_data: oracles_data.clone(),
         };
 
         Ok(asset_blockchain_data)

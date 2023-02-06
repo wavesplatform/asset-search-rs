@@ -2,9 +2,9 @@ pub mod pg;
 
 use anyhow::Result;
 
-use super::models::asset::{
-    AssetOverride, DeletedAsset, InsertableAsset, OracleDataEntry, QueryableAsset,
-};
+use crate::services::assets::repo::{Asset, OracleDataEntry};
+
+use super::models::asset::{AssetOverride, DeletedAsset, InsertableAsset};
 use super::models::asset_labels::{
     AssetLabels, AssetLabelsOverride, DeletedAssetLabels, InsertableAssetLabels,
 };
@@ -65,7 +65,7 @@ pub trait Repo {
 
     fn assets_gt_block_uid(&self, block_uid: &i64) -> Result<Vec<i64>>;
 
-    fn mget_assets(&self, uids: &[i64]) -> Result<Vec<Option<QueryableAsset>>>;
+    fn mget_assets(&self, uids: &[i64]) -> Result<Vec<Option<Asset>>>;
 
     fn assets_oracle_data_entries(
         &self,
@@ -73,7 +73,7 @@ pub trait Repo {
         oracle_address: &str,
     ) -> Result<Vec<OracleDataEntry>>;
 
-    fn issuer_assets(&self, issuer_address: impl AsRef<str>) -> Result<Vec<QueryableAsset>>;
+    fn issuer_assets(&self, issuer_address: impl AsRef<str>) -> Result<Vec<Asset>>;
 
     //
     // ASSET LABELS
@@ -173,4 +173,13 @@ pub trait Repo {
     fn set_out_leasings_next_update_uid(&self, new_uid: i64) -> Result<()>;
 
     fn rollback_out_leasings(&self, block_uid: &i64) -> Result<Vec<DeletedOutLeasing>>;
+
+    //
+    fn data_entries(
+        &self,
+        asset_ids: &[&str],
+        oracle_address: &str,
+    ) -> Result<Vec<OracleDataEntry>>;
+
+    fn mget_assets_by_ids(&self, ids: &[&str]) -> Result<Vec<Option<Asset>>>;
 }

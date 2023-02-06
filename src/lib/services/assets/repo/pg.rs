@@ -15,7 +15,7 @@ use crate::services::assets::repo::LabelFilter;
 const MAX_UID: i64 = i64::MAX - 1;
 
 lazy_static! {
-    static ref ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY: String =  format!("SELECT
+    pub(crate) static ref ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY: String =  format!("SELECT
         a.id,
         a.name,
         a.precision,
