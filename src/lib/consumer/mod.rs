@@ -641,6 +641,9 @@ where
                 Some(cached) => {
                     let new_asset_blockchain_data =
                         AssetBlockchainData::from((cached, asset_info_updates));
+
+                    info!("set new redis cache asset data: {}", &asset_id);
+
                     blockchain_data_cache
                         .set(&asset_id, new_asset_blockchain_data)
                         .unwrap_or_else(|_| panic!("error setting redis cache data"));
