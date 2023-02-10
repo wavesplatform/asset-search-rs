@@ -2,7 +2,7 @@ pub mod pg;
 
 use anyhow::Result;
 
-use crate::services::assets::repo::{Asset, OracleDataEntry};
+use crate::services::assets::repo::{Asset, OracleDataEntry, UserDefinedData};
 
 use super::models::asset::{AssetOverride, DeletedAsset, InsertableAsset};
 use super::models::asset_labels::{
@@ -182,4 +182,6 @@ pub trait Repo {
     ) -> Result<Vec<OracleDataEntry>>;
 
     fn mget_assets_by_ids(&self, ids: &[&str]) -> Result<Vec<Option<Asset>>>;
+
+    fn mget_asset_user_defined_data(&self, asset_ids: &[&str]) -> Result<Vec<UserDefinedData>>;
 }

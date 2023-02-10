@@ -28,7 +28,8 @@ use crate::schema::{
     assets_uid_seq, blocks_microblocks, data_entries, data_entries_uid_seq, issuer_balances,
     issuer_balances_uid_seq, out_leasings, out_leasings_uid_seq,
 };
-use crate::services::assets::repo::{Asset, OracleDataEntry};
+use crate::services::assets::repo::pg::generate_assets_user_defined_data_base_sql_query;
+use crate::services::assets::repo::{Asset, OracleDataEntry, UserDefinedData};
 use crate::tuple_len::TupleLen;
 use crate::waves::WAVES_ID;
 
@@ -985,5 +986,19 @@ impl Repo for PgRepoImpl {
                 let context = format!("Cannot get assets data: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
             })
+    }
+
+    fn mget_asset_user_defined_data(&self, asset_ids: &[&str]) -> Result<Vec<UserDefinedData>> {
+        sql_query(&format!(
+            "{} WHERE a.id = ANY(ARRAY[$1]) AND a.superseded_by = $2",
+            generate_assets_user_defined_data_base_sql_query()
+        ))
+        .bind::<Array<Text>, _>(asset_ids)
+        .bind::<BigInt, _>(MAX_UID)
+        .get_results(&self.conn)
+        .map_err(|err| {
+            let context = format!("Cannot get assets data: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
     }
 }

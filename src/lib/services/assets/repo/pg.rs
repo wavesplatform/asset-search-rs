@@ -371,7 +371,7 @@ impl Repo for PgRepo {
     }
 }
 
-fn generate_assets_user_defined_data_base_sql_query() -> String {
+pub(crate) fn generate_assets_user_defined_data_base_sql_query() -> String {
     format!(
         "SELECT 
         a.id as asset_id,
