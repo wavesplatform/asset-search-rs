@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate diesel;
 
-pub mod admin;
 pub mod api;
 pub mod api_clients;
 pub mod async_redis;

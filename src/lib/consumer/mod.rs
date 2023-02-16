@@ -492,6 +492,29 @@ where
         .map(|a| a.1.id.as_str())
         .collect();
 
+    update_redis_cache_from_db(
+        repo,
+        &asset_ids,
+        blockchain_data_cache,
+        user_defined_data_cache,
+        waves_association_address,
+    )?;
+
+    Ok(())
+}
+
+fn update_redis_cache_from_db<'a, R, CBD, CUDD>(
+    repo: Arc<R>,
+    asset_ids: &Vec<&str>,
+    blockchain_data_cache: CBD,
+    user_defined_data_cache: CUDD,
+    waves_association_address: &str,
+) -> Result<()>
+where
+    R: repo::Repo,
+    CBD: SyncReadCache<AssetBlockchainData> + SyncWriteCache<AssetBlockchainData> + Clone,
+    CUDD: SyncReadCache<AssetUserDefinedData> + SyncWriteCache<AssetUserDefinedData> + Clone,
+{
     let assets_oracles_data = repo.data_entries(&asset_ids, waves_association_address)?;
 
     let assets_oracles_data =
@@ -1534,118 +1557,20 @@ where
     repo.rollback_blocks_microblocks(&block_uid)?;
 
     // Invalidate cache
-    let assets = repo.mget_assets(&assets_to_rollback)?;
-
-    let asset_ids = &assets
+    let assets_ids = repo.mget_assets(&assets_to_rollback)?;
+    let assets_ids = assets_ids
         .iter()
-        .filter_map(|o| match o {
-            Some(a) => Some(a.id.as_str()),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
+        .filter(|i| i.is_some())
+        .map(|i| i.as_ref().unwrap().id.as_str())
+        .collect();
 
-    // Current assets oracles data
-    let assets_oracles_data =
-        repo.assets_oracle_data_entries(&asset_ids, waves_association_address)?;
-
-    let assets_oracles_data =
-        assets_oracles_data
-            .into_iter()
-            .fold(HashMap::new(), |mut acc, cur| {
-                let asset_data = acc.entry(cur.asset_id.clone()).or_insert(HashMap::new());
-                let asset_oracle_data = asset_data
-                    .entry(cur.oracle_address.clone())
-                    .or_insert(vec![]);
-                let asset_oracle_data_entry = AssetOracleDataEntry::from(&cur);
-                asset_oracle_data.push(asset_oracle_data_entry);
-                acc
-            });
-
-    // Invalidate blockchain data cache
-    assets
-        .iter()
-        .filter_map(|o| match o {
-            Some(a) => {
-                let asset_oracles_data =
-                    assets_oracles_data.get(&a.id).cloned().unwrap_or_default();
-
-                Some(AssetBlockchainData::from_asset_and_oracles_data(
-                    a,
-                    &asset_oracles_data,
-                ))
-            }
-            _ => None,
-        })
-        .try_for_each(|asset_blockchain_data| {
-            blockchain_data_cache.set(&asset_blockchain_data.id.clone(), asset_blockchain_data)
-        })?;
-
-    let cached_user_defined_data = user_defined_data_cache.mget(&asset_ids)?.into_iter().fold(
-        HashMap::with_capacity(asset_ids.len()),
-        |mut acc, o| {
-            if let Some(a) = o {
-                acc.insert(a.asset_id.clone(), a);
-            }
-            acc
-        },
-    );
-
-    // Invalidate user defined data cache (rollback asset labels)
-    let assets_labels = repo
-        .mget_asset_labels(asset_ids)?
-        .into_iter()
-        .map(|asset_labels| (asset_labels.asset_id, asset_labels.labels))
-        .collect::<HashMap<String, Vec<String>>>();
-
-    asset_ids.iter().try_for_each(|asset_id| {
-        let asset_labels_update = assets_labels.get(asset_id.to_owned());
-
-        if let Some(asset_labels_update) = asset_labels_update {
-            let current_asset_user_defined_data = match cached_user_defined_data.get(*asset_id) {
-                Some(cached) => cached.to_owned(),
-                _ => AssetUserDefinedData {
-                    asset_id: asset_id.to_string(),
-                    labels: vec![],
-                },
-            };
-
-            let asset_labels_update = asset_labels_update
-                .clone()
-                .into_iter()
-                .collect::<HashSet<String>>();
-
-            let current_asset_labels = current_asset_user_defined_data
-                .labels
-                .clone()
-                .into_iter()
-                .collect::<HashSet<String>>();
-
-            // Labels to add to asset
-            let settings = asset_labels_update
-                .difference(&current_asset_labels)
-                .map(|label| AssetLabelUpdate::SetLabel(label.to_owned()));
-
-            // Labels to delete from asset
-            let deletings = current_asset_labels
-                .difference(&asset_labels_update)
-                .map(|label| AssetLabelUpdate::DeleteLabel(label.to_owned()));
-
-            let rollbacked_asset_user_defined_data =
-                settings
-                    .chain(deletings)
-                    .fold(
-                        current_asset_user_defined_data,
-                        |acc, update| match update {
-                            AssetLabelUpdate::SetLabel(label) => acc.add_label(&label),
-                            AssetLabelUpdate::DeleteLabel(label) => acc.delete_label(&label),
-                        },
-                    );
-
-            user_defined_data_cache.set(&asset_id, rollbacked_asset_user_defined_data)
-        } else {
-            Ok(())
-        }
-    })?;
+    update_redis_cache_from_db(
+        repo,
+        &assets_ids,
+        blockchain_data_cache,
+        user_defined_data_cache,
+        waves_association_address,
+    )?;
 
     Ok(())
 }

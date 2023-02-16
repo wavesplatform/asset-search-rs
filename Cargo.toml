@@ -10,17 +10,25 @@ anyhow = "1.0"
 async-trait = "0.1"
 base64 = "0.13"
 bb8 = { git = "https://github.com/Barre/bb8", branch = "multiplexed-connections" }
-bb8-redis = { git = "https://github.com/Barre/bb8", branch = "multiplexed-connections", features = ["multiplexed-connections"] }
+bb8-redis = { git = "https://github.com/Barre/bb8", branch = "multiplexed-connections", features = [
+    "multiplexed-connections",
+] }
 bigdecimal = { version = "0.3", features = ["serde"] }
 blake2 = "0.9"
 bs58 = "0.4"
 bytes = "1.1"
 chrono = { version = "0.4", features = ["serde"] }
-diesel = { version = "1.4", default-features = false, features = ["chrono", "postgres", "r2d2"] }
+diesel = { version = "1.4", default-features = false, features = [
+    "chrono",
+    "postgres",
+    "r2d2",
+] }
 diesel-derive-enum = { version = "1.1.1", features = ["postgres"] }
 diesel_migrations = "1.4"
 envy = "0.4"
-fragstrings = { git = "https://github.com/a-kordys/fragstrings", tag = "v0.1.1", default-features = false, features = ["parse"] }
+fragstrings = { git = "https://github.com/a-kordys/fragstrings", tag = "v0.1.1", default-features = false, features = [
+    "parse",
+] }
 futures = "0.3"
 itertools = "0.10"
 lazy_static = "1.4"
@@ -51,10 +59,6 @@ path = "src/lib/lib.rs"
 [[bin]]
 name = "api"
 path = "src/bin/api.rs"
-
-[[bin]]
-name = "admin"
-path = "src/bin/admin.rs"
 
 [[bin]]
 name = "consumer"
