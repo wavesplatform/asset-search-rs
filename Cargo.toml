@@ -69,5 +69,9 @@ name = "invalidate_cache"
 path = "src/bin/invalidate_cache.rs"
 
 [[bin]]
+name = "update_redis_cache"
+path = "src/bin/update_redis_cache.rs"
+
+[[bin]]
 name = "migration"
 path = "src/bin/migration.rs"

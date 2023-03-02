@@ -21,11 +21,26 @@ use super::PrevHandledHeight;
 
 #[async_trait::async_trait]
 pub trait Repo {
+    type Operations: RepoOperations;
+
+    /// Execute some operations on a pooled connection without creating a database transaction.
+    async fn execute<F, R>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce(Self::Operations) -> Result<R> + Send + 'static,
+        R: Send + 'static;
+
+    /// Execute some operations within a database transaction.
+    async fn transaction<F, R>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce(Self::Operations) -> Result<R> + Send + 'static,
+        R: Clone + Send + 'static;
+}
+
+#[async_trait::async_trait]
+pub trait RepoOperations {
     //
     // COMMON
     //
-
-    fn transaction(&self, f: impl FnOnce() -> Result<()>) -> Result<()>;
 
     fn get_prev_handled_height(&self) -> Result<Option<PrevHandledHeight>>;
 
@@ -177,11 +192,13 @@ pub trait Repo {
     //
     fn data_entries(
         &self,
-        asset_ids: &[&str],
-        oracle_address: &str,
+        asset_ids: &[String],
+        oracle_address: String,
     ) -> Result<Vec<OracleDataEntry>>;
 
-    fn mget_assets_by_ids(&self, ids: &[&str]) -> Result<Vec<Option<Asset>>>;
+    fn mget_assets_by_ids(&self, ids: &[String]) -> Result<Vec<Option<Asset>>>;
 
-    fn mget_asset_user_defined_data(&self, asset_ids: &[&str]) -> Result<Vec<UserDefinedData>>;
+    fn mget_asset_user_defined_data(&self, asset_ids: &[String]) -> Result<Vec<UserDefinedData>>;
+
+    fn get_last_asset_ids_by_issuers(&self, issuers_ids: &[String]) -> Result<Vec<String>>;
 }

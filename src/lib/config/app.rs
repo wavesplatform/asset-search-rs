@@ -4,7 +4,7 @@ use crate::cache::InvalidateCacheMode;
 use crate::error::Error;
 
 fn default_invalidate_entire_cache() -> InvalidateCacheMode {
-    InvalidateCacheMode::UserDefinedData
+    InvalidateCacheMode::AllData
 }
 
 #[derive(Deserialize)]

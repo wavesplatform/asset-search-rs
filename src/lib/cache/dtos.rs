@@ -1,12 +1,7 @@
+use crate::models::{Asset, AssetInfo, AssetMetadata, AssetOracleDataEntry, AssetSponsorBalance};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-
-use crate::error::Error as AppError;
-use crate::models::{
-    Asset, AssetInfo, AssetInfoUpdate, AssetMetadata, AssetOracleDataEntry, AssetSponsorBalance,
-};
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -131,120 +126,5 @@ impl From<(&AssetBlockchainData, &AssetUserDefinedData)> for AssetInfo {
                 oracles_data: blockchain_data.oracles_data.clone(),
             },
         }
-    }
-}
-
-/// Used by consumer for updating cached data
-///
-/// Generates new AssetBlockchainData via applying sequence of updates on current AssetBlockchainData value
-impl From<(&AssetBlockchainData, &Vec<AssetInfoUpdate>)> for AssetBlockchainData {
-    fn from((current, updates): (&AssetBlockchainData, &Vec<AssetInfoUpdate>)) -> Self {
-        updates
-            .iter()
-            .fold(current.to_owned(), |mut cur, update| match update {
-                AssetInfoUpdate::Base(base_asset_info_update) => {
-                    cur.name = base_asset_info_update.name.clone();
-                    cur.description = base_asset_info_update.description.clone();
-                    cur.quantity = base_asset_info_update.quantity;
-                    cur.reissuable = base_asset_info_update.reissuable;
-                    cur.min_sponsored_fee = base_asset_info_update
-                        .min_sponsored_fee;
-                    cur.smart = base_asset_info_update.smart;
-                    cur.nft = base_asset_info_update.nft;
-                    cur
-                }
-                AssetInfoUpdate::OraclesData(oracle_data) => {
-                    cur.oracles_data = oracle_data.to_owned();
-                    cur
-                }
-                AssetInfoUpdate::Labels(_) => {
-                    // It does not need to be handled
-                    cur
-                }
-                AssetInfoUpdate::Ticker(t) => {
-                    cur.ticker = 
-                    if t.is_empty() {
-                        None
-                    } else {
-                        Some(t.clone())
-                    };
-                    
-                    cur
-                }
-                AssetInfoUpdate::SponsorRegularBalance(regular_balance) => {
-                    if cur.min_sponsored_fee.is_some() {
-                        match cur.sponsor_balance.as_mut() {
-                            Some(sponsor_balance) => {
-                                sponsor_balance.regular_balance = regular_balance.to_owned();
-                            }
-                            _ => {
-                                cur.sponsor_balance = Some(AssetSponsorBalance {
-                                    regular_balance: regular_balance.to_owned(),
-                                    out_leasing: None,
-                                })
-                            }
-                        }
-                    }
-                    cur
-                }
-                AssetInfoUpdate::SponsorOutLeasing(out_leasing) => {
-                    if cur.min_sponsored_fee.is_some() {
-                        match cur.sponsor_balance.as_mut() {
-                            Some(sponsor_balance) => {
-                                sponsor_balance.out_leasing = Some(out_leasing.to_owned());
-                            }
-                            _ => {
-                                unreachable!(
-                                    "Expected asset {} issuer ({}) sponsor balance for updating out leasing",
-                                    current.id, current.issuer
-                                );
-                            }
-                        }
-                    }
-                    cur
-                }
-            })
-    }
-}
-
-/// Used by consumer for caching initial asset blockchain data
-///
-/// Generates new AssetBlockchainData from sequence of asset info updates
-/// Requires BaseAssetInfoUpdate to be the first one
-impl TryFrom<&Vec<AssetInfoUpdate>> for AssetBlockchainData {
-    type Error = AppError;
-
-    fn try_from(updates: &Vec<AssetInfoUpdate>) -> Result<Self, Self::Error> {
-        let mut updates_it = updates.iter();
-
-        let base = match updates_it.next() {
-            Some(AssetInfoUpdate::Base(base)) => Ok(base),
-            _ => Err(AppError::IncosistDataError("Expected BaseAssetInfoUpdate as 1st update for transforming Vec<AssetInfoUpdate> into AssetBlockchainData".to_owned())),
-        }?;
-
-        let initial = Self {
-            id: base.id.to_owned(),
-            issuer: base.issuer.to_owned(),
-            precision: base.precision,
-            height: base.update_height,
-            timestamp: base.updated_at,
-            name: base.name.to_owned(),
-            ticker: None,
-            description: base.description.to_owned(),
-            quantity: base.quantity,
-            reissuable: base.reissuable,
-            min_sponsored_fee: base.min_sponsored_fee,
-            smart: base.smart,
-            nft: base.nft,
-            oracles_data: HashMap::new(),
-            sponsor_balance: None,
-        };
-
-        let remaining_updates = updates_it.cloned().collect::<Vec<_>>();
-
-        // apply remaining updates
-        let asset_blockchain_data = Self::from((&initial, &remaining_updates));
-
-        Ok(asset_blockchain_data)
     }
 }

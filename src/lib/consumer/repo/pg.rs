@@ -1,4 +1,5 @@
 use anyhow::{Error, Result};
+use diesel::connection::SimpleConnection;
 use diesel::dsl::sql;
 use diesel::pg::PgConnection;
 use diesel::sql_types::{Array, BigInt, Bool, Text, VarChar};
@@ -17,7 +18,7 @@ use super::super::models::{
     out_leasing::{DeletedOutLeasing, InsertableOutLeasing, OutLeasingOverride},
 };
 use super::super::PrevHandledHeight;
-use super::Repo;
+use super::RepoOperations;
 use crate::consumer::models::asset_tickers::{
     AssetTicker, AssetTickerOverride, DeletedAssetTicker, InsertableAssetTicker,
 };
@@ -45,14 +46,10 @@ pub fn new(conn: PgConnection) -> PgRepoImpl {
 }
 
 #[async_trait::async_trait]
-impl Repo for PgRepoImpl {
+impl RepoOperations for PgRepoImpl {
     //
     // COMMON
     //
-
-    fn transaction(&self, f: impl FnOnce() -> Result<()>) -> Result<()> {
-        self.conn.transaction(|| f())
-    }
 
     fn get_prev_handled_height(&self) -> Result<Option<PrevHandledHeight>> {
         blocks_microblocks::table
@@ -281,7 +278,7 @@ impl Repo for PgRepoImpl {
     }
 
     fn mget_assets(&self, uids: &[i64]) -> Result<Vec<Option<Asset>>> {
-        let q = sql_query("SELECT 
+        let q = sql_query("SELECT
             a.id,
             a.name,
             a.precision,
@@ -339,7 +336,7 @@ impl Repo for PgRepoImpl {
     }
 
     fn issuer_assets(&self, issuer: impl AsRef<str>) -> Result<Vec<Asset>> {
-        let q = sql_query("SELECT 
+        let q = sql_query("SELECT
             a.id,
             a.name,
             a.precision,
@@ -946,8 +943,8 @@ impl Repo for PgRepoImpl {
     //
     fn data_entries(
         &self,
-        asset_ids: &[&str],
-        oracle_address: &str,
+        asset_ids: &[String],
+        oracle_address: String,
     ) -> Result<Vec<OracleDataEntry>> {
         data_entries::table
             .select((
@@ -971,24 +968,39 @@ impl Repo for PgRepoImpl {
             })
     }
 
-    fn mget_assets_by_ids(&self, ids: &[&str]) -> Result<Vec<Option<Asset>>> {
+    fn mget_assets_by_ids(&self, ids: &[String]) -> Result<Vec<Option<Asset>>> {
         //use same query from api
         use crate::services::assets::repo::pg::ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY;
 
-        sql_query(&format!(
+        let sql = format!(
             "{} WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = ANY($2) ORDER BY a.id, a.uid DESC)",
             ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY.as_str()
-        ))
-        .bind::<BigInt, _>(MAX_UID)
-        .bind::<Array<Text>, _>(ids)
-        .get_results(&self.conn)
-        .map_err(|err| {
+        );
+
+        sql_query(&sql)
+            .bind::<BigInt, _>(MAX_UID)
+            .bind::<Array<Text>, _>(ids)
+            .get_results(&self.conn)
+            .map_err(|err| {
                 let context = format!("Cannot get assets data: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
             })
     }
 
-    fn mget_asset_user_defined_data(&self, asset_ids: &[&str]) -> Result<Vec<UserDefinedData>> {
+    fn get_last_asset_ids_by_issuers(&self, issuers_ids: &[String]) -> Result<Vec<String>> {
+        assets::table
+            .select(assets::id)
+            .distinct()
+            .filter(assets::superseded_by.eq(MAX_UID))
+            .filter(assets::issuer.eq_any(issuers_ids))
+            .get_results(&self.conn)
+            .map_err(|err| {
+                let context = format!("Cannot get assets ids by issuers: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn mget_asset_user_defined_data(&self, asset_ids: &[String]) -> Result<Vec<UserDefinedData>> {
         sql_query(&format!(
             "{} WHERE a.id = ANY(ARRAY[$1]) AND a.superseded_by = $2",
             generate_assets_user_defined_data_base_sql_query()
