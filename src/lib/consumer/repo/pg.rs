@@ -1,5 +1,4 @@
 use anyhow::{Error, Result};
-use diesel::connection::SimpleConnection;
 use diesel::dsl::sql;
 use diesel::pg::PgConnection;
 use diesel::sql_types::{Array, BigInt, Bool, Text, VarChar};
@@ -18,7 +17,7 @@ use super::super::models::{
     out_leasing::{DeletedOutLeasing, InsertableOutLeasing, OutLeasingOverride},
 };
 use super::super::PrevHandledHeight;
-use super::RepoOperations;
+use super::{Repo, RepoOperations};
 use crate::consumer::models::asset_tickers::{
     AssetTicker, AssetTickerOverride, DeletedAssetTicker, InsertableAssetTicker,
 };
@@ -45,8 +44,32 @@ pub fn new(conn: PgConnection) -> PgRepoImpl {
     PgRepoImpl { conn }
 }
 
+unsafe impl Send for PgRepoImpl {}
+unsafe impl Sync for PgRepoImpl {}
+
 #[async_trait::async_trait]
-impl RepoOperations for PgRepoImpl {
+impl Repo for PgRepoImpl {
+    type Operations = PgConnection;
+
+    async fn execute<F, R>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce(&Self::Operations) -> Result<R> + Send + 'static,
+        R: Send + 'static,
+    {
+        tokio::task::block_in_place(move || f(&self.conn))
+    }
+
+    async fn transaction<F, R>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce(&Self::Operations) -> Result<R> + Send + 'static,
+        R: Clone + Send + 'static,
+    {
+        tokio::task::block_in_place(move || self.conn.transaction(|| f(&self.conn)))
+    }
+}
+
+#[async_trait::async_trait]
+impl RepoOperations for PgConnection {
     //
     // COMMON
     //
@@ -60,7 +83,7 @@ impl RepoOperations for PgRepoImpl {
                 )),
             )
             .order(blocks_microblocks::uid.asc())
-            .first(&self.conn)
+            .first(self)
             .optional()
             .map_err(|err| Error::new(AppError::DbDieselError(err)))
     }
@@ -69,7 +92,7 @@ impl RepoOperations for PgRepoImpl {
         blocks_microblocks::table
             .select(blocks_microblocks::uid)
             .filter(blocks_microblocks::id.eq(block_id))
-            .get_result(&self.conn)
+            .get_result(self)
             .map_err(|err| {
                 let context = format!("Cannot get block_uid by block id {}: {}", block_id, err);
                 Error::new(AppError::DbDieselError(err)).context(context)
@@ -80,7 +103,7 @@ impl RepoOperations for PgRepoImpl {
         blocks_microblocks::table
             .select(diesel::expression::sql_literal::sql("max(uid)"))
             .filter(blocks_microblocks::time_stamp.is_not_null())
-            .get_result(&self.conn)
+            .get_result(self)
             .map_err(|err| {
                 let context = format!("Cannot get key block uid: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
@@ -92,7 +115,7 @@ impl RepoOperations for PgRepoImpl {
             .select(blocks_microblocks::id)
             .filter(blocks_microblocks::time_stamp.is_null())
             .order(blocks_microblocks::uid.desc())
-            .first(&self.conn)
+            .first(self)
             .optional()
             .map_err(|err| {
                 let context = format!("Cannot get total block id: {}", err);
@@ -104,7 +127,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::insert_into(blocks_microblocks::table)
             .values(blocks)
             .returning(blocks_microblocks::uid)
-            .get_results(&self.conn)
+            .get_results(self)
             .map_err(|err| {
                 let context = format!("Cannot insert blocks/microblocks: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
@@ -115,7 +138,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::update(blocks_microblocks::table)
             .set(blocks_microblocks::id.eq(new_block_id))
             .filter(blocks_microblocks::uid.eq(block_uid))
-            .execute(&self.conn)
+            .execute(self)
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot change block id: {}", err);
@@ -126,7 +149,7 @@ impl RepoOperations for PgRepoImpl {
     fn delete_microblocks(&self) -> Result<()> {
         diesel::delete(blocks_microblocks::table)
             .filter(blocks_microblocks::time_stamp.is_null())
-            .execute(&self.conn)
+            .execute(self)
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot delete microblocks: {}", err);
@@ -137,7 +160,7 @@ impl RepoOperations for PgRepoImpl {
     fn rollback_blocks_microblocks(&self, block_uid: &i64) -> Result<()> {
         diesel::delete(blocks_microblocks::table)
             .filter(blocks_microblocks::uid.gt(block_uid))
-            .execute(&self.conn)
+            .execute(self)
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot rollback blocks/microblocks: {}", err);
@@ -154,7 +177,7 @@ impl RepoOperations for PgRepoImpl {
             .select(assets::quantity)
             .filter(assets::superseded_by.eq(MAX_UID))
             .filter(assets::id.eq(WAVES_ID))
-            .first(&self.conn)
+            .first(self)
             .map_err(|err| {
                 let context = format!("Cannot get current waves quantity: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
@@ -164,7 +187,7 @@ impl RepoOperations for PgRepoImpl {
     fn get_next_assets_uid(&self) -> Result<i64> {
         assets_uid_seq::table
             .select(assets_uid_seq::last_value)
-            .first(&self.conn)
+            .first(self)
             .map_err(|err| {
                 let context = format!("Cannot get next assets update uid: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
@@ -181,7 +204,7 @@ impl RepoOperations for PgRepoImpl {
             .try_fold((), |_, chunk| {
                 diesel::insert_into(assets::table)
                     .values(chunk)
-                    .execute(&self.conn)
+                    .execute(self)
                     .map(|_| ())
             })
             .map_err(|err| {
@@ -194,7 +217,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::update(assets::table)
             .set((assets::block_uid.eq(block_uid),))
             .filter(assets::block_uid.gt(block_uid))
-            .execute(&self.conn)
+            .execute(self)
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot update assets block references: {}", err);
@@ -216,7 +239,7 @@ impl RepoOperations for PgRepoImpl {
             .bind::<Array<BigInt>, _>(superseded_by_uids)
             .bind::<BigInt, _>(MAX_UID);
 
-        q.execute(&self.conn).map(|_| ()).map_err(|err| {
+        q.execute(self).map(|_| ()).map_err(|err| {
             let context = format!("Cannot close assets superseded_by: {}", err);
             Error::new(AppError::DbDieselError(err)).context(context)
         })
@@ -226,7 +249,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::sql_query("UPDATE assets SET superseded_by = $1 FROM (SELECT UNNEST($2) AS superseded_by) AS current WHERE assets.superseded_by = current.superseded_by;")
             .bind::<BigInt, _>(MAX_UID)
             .bind::<Array<BigInt>, _>(current_superseded_by)
-            .execute(&self.conn)
+            .execute(self)
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot reopen assets superseded_by: {}", err);
@@ -239,7 +262,7 @@ impl RepoOperations for PgRepoImpl {
             "select setval('assets_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
             new_uid
         ))
-        .execute(&self.conn)
+        .execute(self)
         .map(|_| ())
         .map_err(|err| {
             let context = format!("Cannot set assets next update uid: {}", err);
@@ -251,7 +274,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::delete(assets::table)
             .filter(assets::block_uid.gt(block_uid))
             .returning((assets::uid, assets::id))
-            .get_results(&self.conn)
+            .get_results(self)
             .map(|bs| {
                 bs.into_iter()
                     .map(|(uid, id)| DeletedAsset { uid, id })
@@ -267,7 +290,7 @@ impl RepoOperations for PgRepoImpl {
         assets::table
             .select(assets::uid)
             .filter(assets::block_uid.gt(block_uid))
-            .get_results(&self.conn)
+            .get_results(self)
             .map_err(|err| {
                 let context = format!(
                     "Cannot get assets greater then block_uid {}: {}",
@@ -302,7 +325,7 @@ impl RepoOperations for PgRepoImpl {
         .bind::<BigInt, _>(MAX_UID)
         .bind::<Array<BigInt>, _>(uids);
 
-        q.load(&self.conn).map_err(|err| {
+        q.load(self).map_err(|err| {
             let context = format!("Cannot mget assets: {}", err);
             Error::new(AppError::DbDieselError(err)).context(context)
         })
@@ -329,7 +352,7 @@ impl RepoOperations for PgRepoImpl {
             .filter(data_entries::related_asset_id.eq_any(asset_ids))
             .filter(data_entries::data_type.is_not_null());
 
-        q.load(&self.conn).map_err(|err| {
+        q.load(self).map_err(|err| {
             let context = format!("Cannot assets oracle data entries: {}", err);
             Error::new(AppError::DbDieselError(err)).context(context)
         })
@@ -363,7 +386,7 @@ impl RepoOperations for PgRepoImpl {
         .bind::<Bool, _>(false)
         .bind::<Text, _>(issuer.as_ref());
 
-        q.load(&self.conn).map_err(|err| {
+        q.load(self).map_err(|err| {
             let context = format!("Cannot issuer {} assets: {}", issuer.as_ref(), err);
             Error::new(AppError::DbDieselError(err)).context(context)
         })
@@ -379,7 +402,7 @@ impl RepoOperations for PgRepoImpl {
             .filter(asset_labels::superseded_by.eq(MAX_UID))
             .filter(asset_labels::asset_id.eq_any(asset_ids));
 
-        q.load(&self.conn).map_err(|err| {
+        q.load(self).map_err(|err| {
             let context = format!("Cannot assets labels: {}", err);
             Error::new(AppError::DbDieselError(err)).context(context)
         })
@@ -388,7 +411,7 @@ impl RepoOperations for PgRepoImpl {
     fn get_next_asset_labels_uid(&self) -> Result<i64> {
         asset_labels_uid_seq::table
             .select(asset_labels_uid_seq::last_value)
-            .first(&self.conn)
+            .first(self)
             .map_err(|err| {
                 let context = format!("Cannot get next asset labels update uid: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
@@ -405,7 +428,7 @@ impl RepoOperations for PgRepoImpl {
             .try_fold((), |_, chunk| {
                 diesel::insert_into(asset_labels::table)
                     .values(chunk)
-                    .execute(&self.conn)
+                    .execute(self)
                     .map(|_| ())
             })
             .map_err(|err| {
@@ -418,7 +441,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::update(asset_labels::table)
             .set((asset_labels::block_uid.eq(block_uid),))
             .filter(asset_labels::block_uid.gt(block_uid))
-            .execute(&self.conn)
+            .execute(self)
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot update asset_labels block references: {}", err);
@@ -440,7 +463,7 @@ impl RepoOperations for PgRepoImpl {
             .bind::<Array<BigInt>, _>(superseded_by_uids)
             .bind::<BigInt, _>(MAX_UID);
 
-        q.execute(&self.conn).map(|_| ()).map_err(|err| {
+        q.execute(self).map(|_| ()).map_err(|err| {
             let context = format!("Cannot close asset_labels superseded_by: {}", err);
             Error::new(AppError::DbDieselError(err)).context(context)
         })
@@ -450,7 +473,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::sql_query("UPDATE asset_labels SET superseded_by = $1 FROM (SELECT UNNEST($2) AS superseded_by) AS current WHERE asset_labels.superseded_by = current.superseded_by;")
             .bind::<BigInt, _>(MAX_UID)
             .bind::<Array<BigInt>, _>(current_superseded_by)
-            .execute(&self.conn)
+            .execute(self)
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot reopen asset_labels superseded_by: {}", err);
@@ -463,7 +486,7 @@ impl RepoOperations for PgRepoImpl {
             "select setval('asset_labels_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
             new_uid
         ))
-        .execute(&self.conn)
+        .execute(self)
         .map(|_| ())
         .map_err(|err| {
             let context = format!("Cannot set asset_labels next update uid: {}", err);
@@ -475,7 +498,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::delete(asset_labels::table)
             .filter(asset_labels::block_uid.gt(block_uid))
             .returning((asset_labels::uid, asset_labels::asset_id))
-            .get_results(&self.conn)
+            .get_results(self)
             .map(|bs| {
                 bs.into_iter()
                     .map(|(uid, asset_id)| DeletedAssetLabels { uid, asset_id })
@@ -497,7 +520,7 @@ impl RepoOperations for PgRepoImpl {
             .filter(asset_tickers::superseded_by.eq(MAX_UID))
             .filter(asset_tickers::asset_id.eq_any(asset_ids));
 
-        q.load(&self.conn).map_err(|err| {
+        q.load(self).map_err(|err| {
             let context = format!("Cannot assets tickers: {}", err);
             Error::new(AppError::DbDieselError(err)).context(context)
         })
@@ -506,7 +529,7 @@ impl RepoOperations for PgRepoImpl {
     fn get_next_asset_tickers_uid(&self) -> Result<i64> {
         asset_tickers_uid_seq::table
             .select(asset_tickers_uid_seq::last_value)
-            .first(&self.conn)
+            .first(self)
             .map_err(|err| {
                 let context = format!("Cannot get next asset tickers update uid: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
@@ -527,7 +550,7 @@ impl RepoOperations for PgRepoImpl {
             .bind::<Array<BigInt>, _>(superseded_by_uids)
             .bind::<BigInt, _>(MAX_UID);
 
-        q.execute(&self.conn).map(|_| ()).map_err(|err| {
+        q.execute(self).map(|_| ()).map_err(|err| {
             let context = format!("Cannot close asset_tickers superseded_by: {}", err);
             Error::new(AppError::DbDieselError(err)).context(context)
         })
@@ -543,7 +566,7 @@ impl RepoOperations for PgRepoImpl {
             .try_fold((), |_, chunk| {
                 diesel::insert_into(asset_tickers::table)
                     .values(chunk)
-                    .execute(&self.conn)
+                    .execute(self)
                     .map(|_| ())
             })
             .map_err(|err| {
@@ -557,7 +580,7 @@ impl RepoOperations for PgRepoImpl {
             "select setval('asset_tickers_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
             new_uid
         ))
-        .execute(&self.conn)
+        .execute(self)
         .map(|_| ())
         .map_err(|err| {
             let context = format!("Cannot set asset_tickers next update uid: {}", err);
@@ -569,7 +592,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::delete(asset_tickers::table)
             .filter(asset_tickers::block_uid.gt(block_uid))
             .returning((asset_tickers::uid, asset_tickers::asset_id))
-            .get_results(&self.conn)
+            .get_results(self)
             .map(|bs| {
                 bs.into_iter()
                     .map(|(uid, asset_id)| DeletedAssetTicker { uid, asset_id })
@@ -585,7 +608,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::sql_query("UPDATE asset_tickers SET superseded_by = $1 FROM (SELECT UNNEST($2) AS superseded_by) AS current WHERE asset_tickers.superseded_by = current.superseded_by;")
             .bind::<BigInt, _>(MAX_UID)
             .bind::<Array<BigInt>, _>(current_superseded_by)
-            .execute(&self.conn)
+            .execute(self)
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot reopen asset_tickers superseded_by: {}", err);
@@ -597,7 +620,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::update(asset_tickers::table)
             .set((asset_tickers::block_uid.eq(block_uid),))
             .filter(asset_tickers::block_uid.gt(block_uid))
-            .execute(&self.conn)
+            .execute(self)
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot update asset_tickers block references: {}", err);
@@ -612,7 +635,7 @@ impl RepoOperations for PgRepoImpl {
     fn get_next_data_entries_uid(&self) -> Result<i64> {
         data_entries_uid_seq::table
             .select(data_entries_uid_seq::last_value)
-            .first(&self.conn)
+            .first(self)
             .map_err(|err| {
                 let context = format!("Cannot get next data entries update uid: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
@@ -629,7 +652,7 @@ impl RepoOperations for PgRepoImpl {
             .try_fold((), |_, chunk| {
                 diesel::insert_into(data_entries::table)
                     .values(chunk)
-                    .execute(&self.conn)
+                    .execute(self)
                     .map(|_| ())
             })
             .map_err(|err| {
@@ -642,7 +665,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::update(data_entries::table)
             .set((data_entries::block_uid.eq(block_uid),))
             .filter(data_entries::block_uid.gt(block_uid))
-            .execute(&self.conn)
+            .execute(self)
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot update data entries block references: {}", err);
@@ -667,7 +690,7 @@ impl RepoOperations for PgRepoImpl {
             .bind::<Array<BigInt>, _>(superseded_by_uids)
             .bind::<BigInt, _>(MAX_UID);
 
-        q.execute(&self.conn).map(|_| ()).map_err(|err| {
+        q.execute(self).map(|_| ()).map_err(|err| {
             let context = format!("Cannot close data entries superseded_by: {}", err);
             Error::new(AppError::DbDieselError(err)).context(context)
         })
@@ -677,7 +700,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::sql_query("UPDATE data_entries SET superseded_by = $1 FROM (SELECT UNNEST($2) AS superseded_by) AS current WHERE data_entries.superseded_by = current.superseded_by;")
             .bind::<BigInt, _>(MAX_UID)
             .bind::<Array<BigInt>, _>(current_superseded_by)
-            .execute(&self.conn)
+            .execute(self)
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot reopen data entries superseded_by: {}", err);
@@ -690,7 +713,7 @@ impl RepoOperations for PgRepoImpl {
             "select setval('data_entries_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
             new_uid
         ))
-        .execute(&self.conn)
+        .execute(self)
         .map(|_| ())
         .map_err(|err| {
             let context = format!("Cannot set data entries next update uid: {}", err);
@@ -702,7 +725,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::delete(data_entries::table)
             .filter(data_entries::block_uid.gt(block_uid))
             .returning((data_entries::uid, data_entries::address, data_entries::key))
-            .get_results(&self.conn)
+            .get_results(self)
             .map(|bs| {
                 bs.into_iter()
                     .map(|(uid, address, key)| DeletedDataEntry { uid, address, key })
@@ -722,7 +745,7 @@ impl RepoOperations for PgRepoImpl {
         issuer_balances::table
             .select((issuer_balances::address, issuer_balances::regular_balance))
             .filter(issuer_balances::superseded_by.eq(MAX_UID))
-            .load(&self.conn)
+            .load(self)
             .map_err(|err| {
                 let context = format!("Cannot get current issuer balances: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
@@ -732,7 +755,7 @@ impl RepoOperations for PgRepoImpl {
     fn get_next_issuer_balances_uid(&self) -> Result<i64> {
         issuer_balances_uid_seq::table
             .select(issuer_balances_uid_seq::last_value)
-            .first(&self.conn)
+            .first(self)
             .map_err(|err| {
                 let context = format!("Cannot get next issuer balances uid: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
@@ -749,7 +772,7 @@ impl RepoOperations for PgRepoImpl {
             .try_fold((), |_, chunk| {
                 diesel::insert_into(issuer_balances::table)
                     .values(chunk)
-                    .execute(&self.conn)
+                    .execute(self)
                     .map(|_| ())
             })
             .map_err(|err| {
@@ -762,7 +785,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::update(issuer_balances::table)
             .set((issuer_balances::block_uid.eq(block_uid),))
             .filter(issuer_balances::block_uid.gt(block_uid))
-            .execute(&self.conn)
+            .execute(self)
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot update issuer balances block references: {}", err);
@@ -787,7 +810,7 @@ impl RepoOperations for PgRepoImpl {
             .bind::<Array<BigInt>, _>(superseded_by_uids)
             .bind::<BigInt, _>(MAX_UID);
 
-        q.execute(&self.conn).map(|_| ()).map_err(|err| {
+        q.execute(self).map(|_| ()).map_err(|err| {
             let context = format!("Cannot close issuer balances superseded_by: {}", err);
             Error::new(AppError::DbDieselError(err)).context(context)
         })
@@ -797,7 +820,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::sql_query("UPDATE issuer_balances SET superseded_by = $1 FROM (SELECT UNNEST($2) AS superseded_by) AS current WHERE issuer_balances.superseded_by = current.superseded_by;")
             .bind::<BigInt, _>(MAX_UID)
             .bind::<Array<BigInt>, _>(current_superseded_by)
-            .execute(&self.conn)
+            .execute(self)
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot reopen issuer balances superseded_by: {}", err);
@@ -810,7 +833,7 @@ impl RepoOperations for PgRepoImpl {
             "select setval('issuer_balances_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
             new_uid
         ))
-        .execute(&self.conn)
+        .execute(self)
         .map(|_| ())
         .map_err(|err| {
             let context = format!("Cannot set issuer balances next uid: {}", err);
@@ -822,7 +845,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::delete(issuer_balances::table)
             .filter(issuer_balances::block_uid.gt(block_uid))
             .returning((issuer_balances::uid, issuer_balances::address))
-            .get_results(&self.conn)
+            .get_results(self)
             .map(|bs| {
                 bs.into_iter()
                     .map(|(uid, address)| DeletedIssuerBalance { uid, address })
@@ -841,7 +864,7 @@ impl RepoOperations for PgRepoImpl {
     fn get_next_out_leasings_uid(&self) -> Result<i64> {
         out_leasings_uid_seq::table
             .select(out_leasings_uid_seq::last_value)
-            .first(&self.conn)
+            .first(self)
             .map_err(|err| {
                 let context = format!("Cannot get next out leasings uid: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
@@ -858,7 +881,7 @@ impl RepoOperations for PgRepoImpl {
             .try_fold((), |_, chunk| {
                 diesel::insert_into(out_leasings::table)
                     .values(chunk)
-                    .execute(&self.conn)
+                    .execute(self)
                     .map(|_| ())
             })
             .map_err(|err| {
@@ -871,7 +894,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::update(out_leasings::table)
             .set((out_leasings::block_uid.eq(block_uid),))
             .filter(out_leasings::block_uid.gt(block_uid))
-            .execute(&self.conn)
+            .execute(self)
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot update out leasings block references: {}", err);
@@ -893,7 +916,7 @@ impl RepoOperations for PgRepoImpl {
             .bind::<Array<BigInt>, _>(superseded_by_uids)
             .bind::<BigInt, _>(MAX_UID);
 
-        q.execute(&self.conn).map(|_| ()).map_err(|err| {
+        q.execute(self).map(|_| ()).map_err(|err| {
             let context = format!("Cannot close out leasings superseded_by: {}", err);
             Error::new(AppError::DbDieselError(err)).context(context)
         })
@@ -903,7 +926,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::sql_query("UPDATE out_leasings SET superseded_by = $1 FROM (SELECT UNNEST($2) AS superseded_by) AS current WHERE out_leasings.superseded_by = current.superseded_by;")
             .bind::<BigInt, _>(MAX_UID)
             .bind::<Array<BigInt>, _>(current_superseded_by)
-            .execute(&self.conn)
+            .execute(self)
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot reopen out leasings superseded_by: {}", err);
@@ -916,7 +939,7 @@ impl RepoOperations for PgRepoImpl {
             "select setval('out_leasings_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
             new_uid
         ))
-        .execute(&self.conn)
+        .execute(self)
         .map(|_| ())
         .map_err(|err| {
             let context = format!("Cannot set out leasings next uid: {}", err);
@@ -928,7 +951,7 @@ impl RepoOperations for PgRepoImpl {
         diesel::delete(out_leasings::table)
             .filter(out_leasings::block_uid.gt(block_uid))
             .returning((out_leasings::uid, out_leasings::address))
-            .get_results(&self.conn)
+            .get_results(self)
             .map(|bs| {
                 bs.into_iter()
                     .map(|(uid, address)| DeletedOutLeasing { uid, address })
@@ -961,7 +984,7 @@ impl RepoOperations for PgRepoImpl {
             .filter(data_entries::address.eq_all(oracle_address))
             .filter(data_entries::related_asset_id.eq_any(asset_ids))
             .filter(data_entries::data_type.is_not_null())
-            .get_results(&self.conn)
+            .get_results(self)
             .map_err(|err| {
                 let context = format!("Cannot get data_entries: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
@@ -980,7 +1003,7 @@ impl RepoOperations for PgRepoImpl {
         sql_query(&sql)
             .bind::<BigInt, _>(MAX_UID)
             .bind::<Array<Text>, _>(ids)
-            .get_results(&self.conn)
+            .get_results(self)
             .map_err(|err| {
                 let context = format!("Cannot get assets data: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
@@ -993,7 +1016,7 @@ impl RepoOperations for PgRepoImpl {
             .distinct()
             .filter(assets::superseded_by.eq(MAX_UID))
             .filter(assets::issuer.eq_any(issuers_ids))
-            .get_results(&self.conn)
+            .get_results(self)
             .map_err(|err| {
                 let context = format!("Cannot get assets ids by issuers: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
@@ -1007,7 +1030,7 @@ impl RepoOperations for PgRepoImpl {
         ))
         .bind::<Array<Text>, _>(asset_ids)
         .bind::<BigInt, _>(MAX_UID)
-        .get_results(&self.conn)
+        .get_results(self)
         .map_err(|err| {
             let context = format!("Cannot get assets data: {}", err);
             Error::new(AppError::DbDieselError(err)).context(context)

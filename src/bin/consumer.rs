@@ -5,7 +5,6 @@ use app_lib::{
     },
     config, consumer, db, sync_redis,
 };
-use std::sync::Arc;
 use wavesexchange_log::{error, info};
 
 #[tokio::main]
@@ -45,7 +44,7 @@ async fn main() -> Result<()> {
         config.consumer.updates_per_request,
         config.consumer.max_wait_time_in_secs,
         config.consumer.chain_id,
-        config.consumer.waves_association_address,
+        config.consumer.asset_storage_address,
     )
     .await
     {

@@ -74,7 +74,7 @@ pub struct AssetsService {
     asset_blockhaind_data_cache: Box<dyn cache::AsyncReadCache<AssetBlockchainData> + Send + Sync>,
     asset_user_defined_data_cache:
         Box<dyn cache::AsyncReadCache<AssetUserDefinedData> + Send + Sync>,
-    waves_association_address: String,
+    asset_storage_address: String,
 }
 
 impl AssetsService {
@@ -86,13 +86,13 @@ impl AssetsService {
         asset_user_defined_data_cache: Box<
             dyn cache::AsyncReadCache<AssetUserDefinedData> + Send + Sync,
         >,
-        waves_association_address: &str,
+        asset_storage_address: &str,
     ) -> Self {
         Self {
             repo,
             asset_blockhaind_data_cache,
             asset_user_defined_data_cache,
-            waves_association_address: waves_association_address.to_owned(),
+            asset_storage_address: asset_storage_address.to_owned(),
         }
     }
 }
@@ -118,9 +118,7 @@ impl Service for AssetsService {
         } else {
             let not_cached_asset = self.repo.get(&id)?;
 
-            let asset_oracles_data = self
-                .repo
-                .data_entries(&[id], &self.waves_association_address)?;
+            let asset_oracles_data = self.repo.data_entries(&[id], &self.asset_storage_address)?;
 
             let asset_oracles_data =
                 asset_oracles_data
@@ -184,8 +182,7 @@ impl Service for AssetsService {
 
                 let asset_oracles_data = {
                     timer!("assets_service::mget::data_entries");
-                    self.repo
-                        .data_entries(&ids, &self.waves_association_address)?
+                    self.repo.data_entries(&ids, &self.asset_storage_address)?
                 };
 
                 let assets_oracles_data =
@@ -270,7 +267,7 @@ impl Service for AssetsService {
 
                     let asset_oracles_data = self
                         .repo
-                        .data_entries(&not_cached_asset_ids, &self.waves_association_address)?;
+                        .data_entries(&not_cached_asset_ids, &self.asset_storage_address)?;
 
                     // AssetId -> OracleAddress -> Vec<DataEntry>
                     let assets_oracles_data =

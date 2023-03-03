@@ -26,13 +26,13 @@ pub trait Repo {
     /// Execute some operations on a pooled connection without creating a database transaction.
     async fn execute<F, R>(&self, f: F) -> Result<R>
     where
-        F: FnOnce(Self::Operations) -> Result<R> + Send + 'static,
+        F: FnOnce(&Self::Operations) -> Result<R> + Send + 'static,
         R: Send + 'static;
 
     /// Execute some operations within a database transaction.
     async fn transaction<F, R>(&self, f: F) -> Result<R>
     where
-        F: FnOnce(Self::Operations) -> Result<R> + Send + 'static,
+        F: FnOnce(&Self::Operations) -> Result<R> + Send + 'static,
         R: Clone + Send + 'static;
 }
 
