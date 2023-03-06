@@ -423,7 +423,7 @@ where
                         extract_asset_tickers_updates(
                             append.height as i32,
                             tx,
-                            asset_storage_address.clone(), // wich address
+                            asset_storage_address.clone(),
                         )
                     })
                     .map(|u| (block_uid, u))

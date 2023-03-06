@@ -963,7 +963,7 @@ impl RepoOperations for PgConnection {
             })
     }
 
-    //
+    // Methods for searching assets data for consumer
     fn data_entries(
         &self,
         asset_ids: &[String],
