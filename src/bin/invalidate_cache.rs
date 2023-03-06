@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
         pg_repo.clone(),
         Box::new(assets_blockchain_data_redis_cache.clone()),
         Box::new(assets_user_defined_data_redis_cache.clone()),
-        &config.app.waves_association_address,
+        &config.app.asset_storage_address,
     );
 
     cache::invalidator::run(

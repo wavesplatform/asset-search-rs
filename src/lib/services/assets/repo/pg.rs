@@ -15,7 +15,7 @@ use crate::services::assets::repo::LabelFilter;
 const MAX_UID: i64 = i64::MAX - 1;
 
 lazy_static! {
-    static ref ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY: String =  format!("SELECT
+    pub(crate) static ref ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY: String =  format!("SELECT
         a.id,
         a.name,
         a.precision,
@@ -371,7 +371,7 @@ impl Repo for PgRepo {
     }
 }
 
-fn generate_assets_user_defined_data_base_sql_query() -> String {
+pub(crate) fn generate_assets_user_defined_data_base_sql_query() -> String {
     format!(
         "SELECT 
         a.id as asset_id,

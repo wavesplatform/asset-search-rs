@@ -1,4 +1,3 @@
-pub mod admin;
 pub mod api;
 pub mod app;
 pub mod consumer;
@@ -10,15 +9,6 @@ use crate::error::Error;
 
 #[derive(Debug, Clone)]
 pub struct APIConfig {
-    pub api: api::Config,
-    pub app: app::Config,
-    pub postgres: postgres::Config,
-    pub redis: redis::Config,
-}
-
-#[derive(Debug, Clone)]
-pub struct AdminConfig {
-    pub admin: admin::Config,
     pub api: api::Config,
     pub app: app::Config,
     pub postgres: postgres::Config,
@@ -46,22 +36,6 @@ pub async fn load_api_config() -> Result<APIConfig, Error> {
     let redis_config = redis::load()?;
 
     Ok(APIConfig {
-        api: api_config,
-        app: app_config,
-        postgres: postgres_config,
-        redis: redis_config,
-    })
-}
-
-pub async fn load_admin_config() -> Result<AdminConfig, Error> {
-    let api_config = api::load()?;
-    let app_config = app::load()?;
-    let admin_config = admin::load()?;
-    let redis_config = redis::load()?;
-    let postgres_config = postgres::load()?;
-
-    Ok(AdminConfig {
-        admin: admin_config,
         api: api_config,
         app: app_config,
         postgres: postgres_config,

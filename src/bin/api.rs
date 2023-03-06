@@ -34,7 +34,7 @@ async fn main() -> Result<()> {
             Arc::new(pg_repo),
             Box::new(assets_blockchain_data_redis_cache),
             Box::new(assets_user_defined_data_redis_cache),
-            &config.app.waves_association_address,
+            &config.app.asset_storage_address,
         )
     };
 
