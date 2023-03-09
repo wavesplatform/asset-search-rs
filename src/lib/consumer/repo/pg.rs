@@ -18,15 +18,23 @@ use super::super::models::{
 };
 use super::super::PrevHandledHeight;
 use super::{Repo, RepoOperations};
+use crate::consumer::models::asset_descriptions::{
+    AssetDescriptionOverride, DeletedAssetDescription, InsertableAssetDescription,
+};
+use crate::consumer::models::asset_names::{
+    AssetNameOverride, DeletedAssetName, InsertableAssetName,
+};
 use crate::consumer::models::asset_tickers::{
     AssetTicker, AssetTickerOverride, DeletedAssetTicker, InsertableAssetTicker,
 };
 use crate::db::enums::DataEntryValueTypeMapping;
 use crate::error::Error as AppError;
 use crate::schema::{
-    asset_labels, asset_labels_uid_seq, asset_tickers, asset_tickers_uid_seq, assets,
-    assets_uid_seq, blocks_microblocks, data_entries, data_entries_uid_seq, issuer_balances,
-    issuer_balances_uid_seq, out_leasings, out_leasings_uid_seq,
+    asset_descriptions as asset_descriptions_diesel, asset_descriptions_uid_seq, asset_labels,
+    asset_labels_uid_seq, asset_names as asset_names_diesel, asset_names_uid_seq, asset_tickers,
+    asset_tickers_uid_seq, assets, assets_uid_seq, blocks_microblocks, data_entries,
+    data_entries_uid_seq, issuer_balances, issuer_balances_uid_seq, out_leasings,
+    out_leasings_uid_seq,
 };
 use crate::services::assets::repo::pg::generate_assets_user_defined_data_base_sql_query;
 use crate::services::assets::repo::{Asset, OracleDataEntry, UserDefinedData};
@@ -959,6 +967,230 @@ impl RepoOperations for PgConnection {
             })
             .map_err(|err| {
                 let context = format!("Cannot rollback out leasings: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    //
+    // ASSET_NAMES
+    //
+
+    fn get_next_asset_names_uid(&self) -> Result<i64> {
+        asset_names_uid_seq::table
+            .select(asset_names_uid_seq::last_value)
+            .first(self)
+            .map_err(|err| {
+                let context = format!("Cannot get next asset names update uid: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn insert_asset_names(&self, names: &Vec<InsertableAssetName>) -> Result<()> {
+        let columns_count = asset_names_diesel::table::all_columns().len();
+        let chunk_size = (PG_MAX_INSERT_FIELDS_COUNT / columns_count) / 10 * 10;
+        names
+            .to_owned()
+            .chunks(chunk_size)
+            .into_iter()
+            .try_fold((), |_, chunk| {
+                diesel::insert_into(asset_names_diesel::table)
+                    .values(chunk)
+                    .execute(self)
+                    .map(|_| ())
+            })
+            .map_err(|err| {
+                let context = format!("Cannot insert new asset names: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn update_asset_names_block_references(&self, block_uid: &i64) -> Result<()> {
+        diesel::update(asset_names_diesel::table)
+            .set((asset_names_diesel::block_uid.eq(block_uid),))
+            .filter(asset_names_diesel::block_uid.gt(block_uid))
+            .execute(self)
+            .map(|_| ())
+            .map_err(|err| {
+                let context = format!("Cannot update asset_names block references: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn close_asset_names_superseded_by(&self, updates: &Vec<AssetNameOverride>) -> Result<()> {
+        let mut asset_ids = vec![];
+        let mut superseded_by_uids = vec![];
+
+        updates.iter().for_each(|u| {
+            asset_ids.push(&u.asset_id);
+            superseded_by_uids.push(&u.superseded_by);
+        });
+
+        let q = diesel::sql_query("UPDATE asset_names SET superseded_by = updates.superseded_by FROM (SELECT UNNEST($1::text[]) as asset_id, UNNEST($2::int8[]) as superseded_by) AS updates WHERE asset_names.asset_id = updates.asset_id AND asset_names.superseded_by = $3;")
+            .bind::<Array<VarChar>, _>(asset_ids)
+            .bind::<Array<BigInt>, _>(superseded_by_uids)
+            .bind::<BigInt, _>(MAX_UID);
+
+        q.execute(self).map(|_| ()).map_err(|err| {
+            let context = format!("Cannot close asset_names superseded_by: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
+    }
+
+    fn reopen_asset_names_superseded_by(&self, current_superseded_by: &Vec<i64>) -> Result<()> {
+        diesel::sql_query("UPDATE asset_names SET superseded_by = $1 FROM (SELECT UNNEST($2) AS superseded_by) AS current WHERE asset_names.superseded_by = current.superseded_by;")
+            .bind::<BigInt, _>(MAX_UID)
+            .bind::<Array<BigInt>, _>(current_superseded_by)
+            .execute(self)
+            .map(|_| ())
+            .map_err(|err| {
+                let context = format!("Cannot reopen asset_names superseded_by: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn set_asset_names_next_update_uid(&self, new_uid: i64) -> Result<()> {
+        diesel::sql_query(format!(
+            "select setval('asset_names_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
+            new_uid
+        ))
+        .execute(self)
+        .map(|_| ())
+        .map_err(|err| {
+            let context = format!("Cannot set asset_names next update uid: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
+    }
+
+    fn rollback_asset_names(&self, block_uid: &i64) -> Result<Vec<DeletedAssetName>> {
+        diesel::delete(asset_names_diesel::table)
+            .filter(asset_names_diesel::block_uid.gt(block_uid))
+            .returning((asset_names_diesel::uid, asset_names_diesel::asset_id))
+            .get_results(self)
+            .map(|bs| {
+                bs.into_iter()
+                    .map(|(uid, asset_id)| DeletedAssetName { uid, asset_id })
+                    .collect()
+            })
+            .map_err(|err| {
+                let context = format!("Cannot rollback asset_names: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    //
+    // ASSET_DESCRIPTIONS
+    //
+
+    fn get_next_asset_descriptions_uid(&self) -> Result<i64> {
+        asset_descriptions_uid_seq::table
+            .select(asset_descriptions_uid_seq::last_value)
+            .first(self)
+            .map_err(|err| {
+                let context = format!("Cannot get next asset descriptions update uid: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn insert_asset_descriptions(
+        &self,
+        descriptions: &Vec<InsertableAssetDescription>,
+    ) -> Result<()> {
+        let columns_count = asset_descriptions_diesel::table::all_columns().len();
+        let chunk_size = (PG_MAX_INSERT_FIELDS_COUNT / columns_count) / 10 * 10;
+        descriptions
+            .to_owned()
+            .chunks(chunk_size)
+            .into_iter()
+            .try_fold((), |_, chunk| {
+                diesel::insert_into(asset_descriptions_diesel::table)
+                    .values(chunk)
+                    .execute(self)
+                    .map(|_| ())
+            })
+            .map_err(|err| {
+                let context = format!("Cannot insert new asset descriptions: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn update_asset_descriptions_block_references(&self, block_uid: &i64) -> Result<()> {
+        diesel::update(asset_descriptions_diesel::table)
+            .set((asset_descriptions_diesel::block_uid.eq(block_uid),))
+            .filter(asset_descriptions_diesel::block_uid.gt(block_uid))
+            .execute(self)
+            .map(|_| ())
+            .map_err(|err| {
+                let context = format!("Cannot update asset_descriptions block references: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn close_asset_descriptions_superseded_by(
+        &self,
+        updates: &Vec<AssetDescriptionOverride>,
+    ) -> Result<()> {
+        let mut asset_ids = vec![];
+        let mut superseded_by_uids = vec![];
+
+        updates.iter().for_each(|u| {
+            asset_ids.push(&u.asset_id);
+            superseded_by_uids.push(&u.superseded_by);
+        });
+
+        let q = diesel::sql_query("UPDATE asset_descriptions SET superseded_by = updates.superseded_by FROM (SELECT UNNEST($1::text[]) as asset_id, UNNEST($2::int8[]) as superseded_by) AS updates WHERE asset_descriptions.asset_id = updates.asset_id AND asset_descriptions.superseded_by = $3")
+            .bind::<Array<VarChar>, _>(asset_ids)
+            .bind::<Array<BigInt>, _>(superseded_by_uids)
+            .bind::<BigInt, _>(MAX_UID);
+
+        q.execute(self).map(|_| ()).map_err(|err| {
+            let context = format!("Cannot close asset_descriptions superseded_by: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
+    }
+
+    fn reopen_asset_descriptions_superseded_by(
+        &self,
+        current_superseded_by: &Vec<i64>,
+    ) -> Result<()> {
+        diesel::sql_query("UPDATE asset_descriptions SET superseded_by = $1 FROM (SELECT UNNEST($2) AS superseded_by) AS current WHERE asset_descriptions.superseded_by = current.superseded_by;")
+            .bind::<BigInt, _>(MAX_UID)
+            .bind::<Array<BigInt>, _>(current_superseded_by)
+            .execute(self)
+            .map(|_| ())
+            .map_err(|err| {
+                let context = format!("Cannot reopen asset_descriptions superseded_by: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn set_asset_descriptions_next_update_uid(&self, new_uid: i64) -> Result<()> {
+        diesel::sql_query(format!(
+            "select setval('asset_descriptions_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
+            new_uid
+        ))
+        .execute(self)
+        .map(|_| ())
+        .map_err(|err| {
+            let context = format!("Cannot set asset_descriptions next update uid: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
+    }
+
+    fn rollback_asset_descriptions(&self, block_uid: &i64) -> Result<Vec<DeletedAssetDescription>> {
+        diesel::delete(asset_descriptions_diesel::table)
+            .filter(asset_descriptions_diesel::block_uid.gt(block_uid))
+            .returning((
+                asset_descriptions_diesel::uid,
+                asset_descriptions_diesel::asset_id,
+            ))
+            .get_results(self)
+            .map(|bs| {
+                bs.into_iter()
+                    .map(|(uid, asset_id)| DeletedAssetDescription { uid, asset_id })
+                    .collect()
+            })
+            .map_err(|err| {
+                let context = format!("Cannot rollback asset_descriptions: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
             })
     }

@@ -5,9 +5,13 @@ use anyhow::Result;
 use crate::services::assets::repo::{Asset, OracleDataEntry, UserDefinedData};
 
 use super::models::asset::{AssetOverride, DeletedAsset, InsertableAsset};
+use super::models::asset_descriptions::{
+    AssetDescriptionOverride, DeletedAssetDescription, InsertableAssetDescription,
+};
 use super::models::asset_labels::{
     AssetLabels, AssetLabelsOverride, DeletedAssetLabels, InsertableAssetLabels,
 };
+use super::models::asset_names::{AssetNameOverride, DeletedAssetName, InsertableAssetName};
 use super::models::asset_tickers::{
     AssetTicker, AssetTickerOverride, DeletedAssetTicker, InsertableAssetTicker,
 };
@@ -190,6 +194,48 @@ pub trait RepoOperations {
     fn rollback_out_leasings(&self, block_uid: &i64) -> Result<Vec<DeletedOutLeasing>>;
 
     //
+    // ASSET_NAMES
+    //
+
+    fn get_next_asset_names_uid(&self) -> Result<i64>;
+
+    fn insert_asset_names(&self, balances: &Vec<InsertableAssetName>) -> Result<()>;
+
+    fn update_asset_names_block_references(&self, block_uid: &i64) -> Result<()>;
+
+    fn close_asset_names_superseded_by(&self, updates: &Vec<AssetNameOverride>) -> Result<()>;
+
+    fn reopen_asset_names_superseded_by(&self, current_superseded_by: &Vec<i64>) -> Result<()>;
+
+    fn set_asset_names_next_update_uid(&self, new_uid: i64) -> Result<()>;
+
+    fn rollback_asset_names(&self, block_uid: &i64) -> Result<Vec<DeletedAssetName>>;
+
+    //
+    // ASSET_DESCRIPTIONS
+    //
+
+    fn get_next_asset_descriptions_uid(&self) -> Result<i64>;
+
+    fn insert_asset_descriptions(&self, balances: &Vec<InsertableAssetDescription>) -> Result<()>;
+
+    fn update_asset_descriptions_block_references(&self, block_uid: &i64) -> Result<()>;
+
+    fn close_asset_descriptions_superseded_by(
+        &self,
+        updates: &Vec<AssetDescriptionOverride>,
+    ) -> Result<()>;
+
+    fn reopen_asset_descriptions_superseded_by(
+        &self,
+        current_superseded_by: &Vec<i64>,
+    ) -> Result<()>;
+
+    fn set_asset_descriptions_next_update_uid(&self, new_uid: i64) -> Result<()>;
+
+    fn rollback_asset_descriptions(&self, block_uid: &i64) -> Result<Vec<DeletedAssetDescription>>;
+
+    // Methods needed for updates redis cache
     fn data_entries(
         &self,
         asset_ids: &[String],

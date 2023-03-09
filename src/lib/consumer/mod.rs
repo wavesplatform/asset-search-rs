@@ -21,7 +21,11 @@ use waves_protobuf_schemas::waves::{
 use wavesexchange_log::{debug, info, timer};
 
 use self::models::asset::{AssetOverride, DeletedAsset, InsertableAsset};
+use self::models::asset_descriptions::{
+    AssetDescriptionOverride, DeletedAssetDescription, InsertableAssetDescription,
+};
 use self::models::asset_labels::{AssetLabelsOverride, DeletedAssetLabels, InsertableAssetLabels};
+use self::models::asset_names::{AssetNameOverride, DeletedAssetName, InsertableAssetName};
 use self::models::asset_tickers::{AssetTickerOverride, DeletedAssetTicker, InsertableAssetTicker};
 use self::models::block_microblock::BlockMicroblock;
 use self::models::data_entry::{
@@ -97,6 +101,18 @@ pub struct AssetLabelsUpdate {
 pub struct AssetTickerUpdate {
     pub asset_id: String,
     pub ticker: String,
+}
+
+#[derive(Debug)]
+pub struct AssetNameUpdate {
+    pub asset_id: String,
+    pub asset_name: String,
+}
+
+#[derive(Debug)]
+pub struct AssetDescriptionUpdate {
+    pub asset_id: String,
+    pub asset_description: String,
 }
 
 #[derive(Clone, Debug)]
@@ -300,6 +316,7 @@ where
     R: repo::RepoOperations,
 {
     let mut changed_issuers: Vec<String> = vec![];
+    let mut changed_asset_ids: Vec<String> = vec![];
 
     let block_uids = repo.insert_blocks_or_microblocks(
         &appends
@@ -324,7 +341,10 @@ where
                 .flat_map(|(block_uid, append)| {
                     extract_base_asset_info_updates(chain_id, append)
                         .into_iter()
-                        .map(|au| (block_uid, au))
+                        .map(|au| {
+                            changed_asset_ids.push(au.id.clone());
+                            (block_uid, au)
+                        })
                         .collect_vec()
                 })
                 .collect();
@@ -339,42 +359,39 @@ where
         base_asset_info_updates_with_block_uids
     };
 
-    let mut changed_asset_ids: Vec<String> = {
-        // Handle data entries updates
-        timer!("data entries updates handling");
+    // Handle data entries updates
+    timer!("data entries updates handling");
 
-        let data_entries_updates_with_block_uids: Vec<(&i64, DataEntryUpdate)> =
-            block_uids_with_appends
-                .iter()
-                .flat_map(|(block_uid, append)| {
-                    append
-                        .txs
-                        .iter()
-                        .flat_map(|tx| {
-                            extract_asset_related_data_entries_updates(
-                                append.height as i32,
-                                tx,
-                                asset_storage_address.clone(),
-                            )
-                        })
-                        .map(|u| (block_uid, u))
-                        .collect_vec()
-                })
-                .collect();
-
-        handle_asset_related_data_entries_updates(repo, &data_entries_updates_with_block_uids)?;
-
-        info!(
-            "handled {} data entries updates",
-            data_entries_updates_with_block_uids.len()
-        );
-
-        data_entries_updates_with_block_uids
+    let data_entries_updates_with_block_uids: Vec<(&i64, DataEntryUpdate)> =
+        block_uids_with_appends
             .iter()
-            .filter(|i| i.1.related_asset_id.is_some())
-            .map(|i| i.1.related_asset_id.as_ref().unwrap().clone())
-            .collect()
-    };
+            .flat_map(|(block_uid, append)| {
+                append
+                    .txs
+                    .iter()
+                    .flat_map(|tx| {
+                        extract_asset_related_data_entries_updates(
+                            append.height as i32,
+                            tx,
+                            asset_storage_address.clone(),
+                        )
+                    })
+                    .map(|u| {
+                        if u.related_asset_id.is_some() {
+                            changed_asset_ids.push(u.related_asset_id.as_ref().unwrap().clone());
+                        }
+                        (block_uid, u)
+                    })
+                    .collect_vec()
+            })
+            .collect();
+
+    handle_asset_related_data_entries_updates(repo, &data_entries_updates_with_block_uids)?;
+
+    info!(
+        "handled {} data entries updates",
+        data_entries_updates_with_block_uids.len()
+    );
 
     // Handle asset labels updates
     timer!("asset label updates handling");
@@ -426,20 +443,82 @@ where
                             asset_storage_address.clone(),
                         )
                     })
-                    .map(|u| (block_uid, u))
+                    .map(|u| {
+                        changed_asset_ids.push(u.asset_id.clone());
+                        (block_uid, u)
+                    })
                     .collect_vec()
             })
             .collect();
 
     handle_asset_tickers_updates(repo, &asset_tickers_updates_with_block_uids)?;
 
-    asset_tickers_updates_with_block_uids.iter().for_each(|i| {
-        changed_asset_ids.push(i.1.asset_id.clone());
-    });
-
     info!(
         "handled {} asset tickers updates",
         asset_tickers_updates_with_block_uids.len()
+    );
+
+    // Handle asset names updates
+    timer!("asset names updates handling");
+
+    let asset_names_updates_with_block_uids: Vec<(&i64, AssetNameUpdate)> = block_uids_with_appends
+        .iter()
+        .flat_map(|(block_uid, append)| {
+            append
+                .txs
+                .iter()
+                .flat_map(|tx| {
+                    extract_asset_name_updates(
+                        append.height as i32,
+                        tx,
+                        asset_storage_address.clone(),
+                    )
+                })
+                .map(|u| {
+                    changed_asset_ids.push(u.asset_id.clone());
+                    (block_uid, u)
+                })
+                .collect_vec()
+        })
+        .collect();
+
+    handle_asset_names_updates(repo, &asset_names_updates_with_block_uids)?;
+
+    info!(
+        "handled {} asset names updates",
+        asset_names_updates_with_block_uids.len()
+    );
+
+    // Handle asset descriptions updates
+    timer!("asset descriptions updates handling");
+
+    let asset_descriptions_updates_with_block_uids: Vec<(&i64, AssetDescriptionUpdate)> =
+        block_uids_with_appends
+            .iter()
+            .flat_map(|(block_uid, append)| {
+                append
+                    .txs
+                    .iter()
+                    .flat_map(|tx| {
+                        extract_asset_description_updates(
+                            append.height as i32,
+                            tx,
+                            asset_storage_address.clone(),
+                        )
+                    })
+                    .map(|u| {
+                        changed_asset_ids.push(u.asset_id.clone());
+                        (block_uid, u)
+                    })
+                    .collect_vec()
+            })
+            .collect();
+
+    handle_asset_descriptions_updates(repo, &asset_descriptions_updates_with_block_uids)?;
+
+    info!(
+        "handled {} asset descriptions updates",
+        asset_descriptions_updates_with_block_uids.len()
     );
 
     // Handle issuer balances updates
@@ -960,6 +1039,88 @@ fn handle_asset_related_data_entries_updates<R: repo::RepoOperations>(
     repo.set_data_entries_next_update_uid(data_entries_next_uid + updates_count as i64)
 }
 
+fn extract_asset_name_updates(
+    _height: i32,
+    tx: &Tx,
+    asset_storage_address: String,
+) -> Vec<AssetNameUpdate> {
+    tx.state_update
+        .data_entries
+        .iter()
+        .filter_map(|data_entry_update| {
+            data_entry_update.data_entry.as_ref().and_then(|de| {
+                let oracle_address = bs58::encode(&data_entry_update.address).into_string();
+                if asset_storage_address == oracle_address && is_asset_name_data_entry(&de.key) {
+                    match de.value.as_ref() {
+                        Some(value) => match value {
+                            Value::StringValue(value)
+                                if asset_storage_address == oracle_address =>
+                            {
+                                frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetNameUpdate {
+                                    asset_id: asset_id,
+                                    asset_name: value.clone(),
+                                })
+                            }
+                            _ => None,
+                        },
+                        // key was deleted -> drop asset ticker
+                        None => frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetNameUpdate {
+                            asset_id,
+                            asset_name: "".into(),
+                        }),
+                    }
+                } else {
+                    None
+                }
+            })
+        })
+        .collect_vec()
+}
+
+fn extract_asset_description_updates(
+    _height: i32,
+    tx: &Tx,
+    asset_storage_address: String,
+) -> Vec<AssetDescriptionUpdate> {
+    tx.state_update
+        .data_entries
+        .iter()
+        .filter_map(|data_entry_update| {
+            data_entry_update.data_entry.as_ref().and_then(|de| {
+                let oracle_address = bs58::encode(&data_entry_update.address).into_string();
+                if asset_storage_address == oracle_address
+                    && is_asset_description_data_entry(&de.key)
+                {
+                    match de.value.as_ref() {
+                        Some(value) => match value {
+                            Value::StringValue(value)
+                                if asset_storage_address == oracle_address =>
+                            {
+                                frag_parse!("%s%s", de.key).map(|(_, asset_id)| {
+                                    AssetDescriptionUpdate {
+                                        asset_id: asset_id,
+                                        asset_description: value.clone(),
+                                    }
+                                })
+                            }
+                            _ => None,
+                        },
+                        // key was deleted -> drop asset ticker
+                        None => frag_parse!("%s%s", de.key).map(|(_, asset_id)| {
+                            AssetDescriptionUpdate {
+                                asset_id,
+                                asset_description: "".into(),
+                            }
+                        }),
+                    }
+                } else {
+                    None
+                }
+            })
+        })
+        .collect_vec()
+}
+
 fn extract_asset_tickers_updates(
     _height: i32,
     tx: &Tx,
@@ -1217,6 +1378,187 @@ fn handle_asset_tickers_updates<R: repo::RepoOperations>(
     repo.insert_asset_tickers(asset_tickers_with_uids_superseded_by)?;
 
     repo.set_asset_tickers_next_update_uid(asset_tickers_next_uid + updates_count as i64)
+}
+
+fn handle_asset_names_updates<R: repo::RepoOperations>(
+    repo: &R,
+    updates: &[(&i64, AssetNameUpdate)],
+) -> Result<()> {
+    if updates.is_empty() {
+        return Ok(());
+    }
+
+    let updates_count = updates.len();
+
+    let asset_names_next_uid = repo.get_next_asset_names_uid()?;
+
+    let asset_names_updates = updates
+        .iter()
+        .enumerate()
+        .map(
+            |(update_idx, (block_uid, name_update))| InsertableAssetName {
+                uid: asset_names_next_uid + update_idx as i64,
+                superseded_by: -1,
+                block_uid: *block_uid.clone(),
+                asset_id: name_update.asset_id.clone(),
+                asset_name: name_update.asset_name.clone(),
+            },
+        )
+        .collect_vec();
+
+    let mut asset_names_grouped: HashMap<InsertableAssetName, Vec<InsertableAssetName>> =
+        HashMap::new();
+
+    asset_names_updates.into_iter().for_each(|update| {
+        let group = asset_names_grouped.entry(update.clone()).or_insert(vec![]);
+        group.push(update);
+    });
+
+    let asset_names_grouped = asset_names_grouped.into_iter().collect_vec();
+
+    let asset_names_grouped_with_uids_superseded_by = asset_names_grouped
+        .into_iter()
+        .map(|(group_key, group)| {
+            let mut updates = group
+                .into_iter()
+                .sorted_by_key(|item| item.uid)
+                .collect::<Vec<InsertableAssetName>>();
+
+            let mut last_uid = std::i64::MAX - 1;
+            (
+                group_key,
+                updates
+                    .as_mut_slice()
+                    .iter_mut()
+                    .rev()
+                    .map(|cur| {
+                        cur.superseded_by = last_uid;
+                        last_uid = cur.uid;
+                        cur.to_owned()
+                    })
+                    .sorted_by_key(|item| item.uid)
+                    .collect(),
+            )
+        })
+        .collect::<Vec<(InsertableAssetName, Vec<InsertableAssetName>)>>();
+
+    let asset_names_first_uids: Vec<AssetNameOverride> =
+        asset_names_grouped_with_uids_superseded_by
+            .iter()
+            .map(|(_, group)| {
+                let first = group.iter().next().unwrap().clone();
+                AssetNameOverride {
+                    superseded_by: first.uid,
+                    asset_id: first.asset_id,
+                }
+            })
+            .collect();
+
+    repo.close_asset_names_superseded_by(&asset_names_first_uids)?;
+
+    let asset_names_with_uids_superseded_by = &asset_names_grouped_with_uids_superseded_by
+        .clone()
+        .into_iter()
+        .flat_map(|(_, v)| v)
+        .sorted_by_key(|asset_names| asset_names.uid)
+        .collect_vec();
+
+    repo.insert_asset_names(asset_names_with_uids_superseded_by)?;
+
+    repo.set_asset_tickers_next_update_uid(asset_names_next_uid + updates_count as i64)
+}
+
+fn handle_asset_descriptions_updates<R: repo::RepoOperations>(
+    repo: &R,
+    updates: &[(&i64, AssetDescriptionUpdate)],
+) -> Result<()> {
+    if updates.is_empty() {
+        return Ok(());
+    }
+
+    let updates_count = updates.len();
+
+    let asset_descriptions_next_uid = repo.get_next_asset_descriptions_uid()?;
+
+    let asset_descriptions_updates = updates
+        .iter()
+        .enumerate()
+        .map(
+            |(update_idx, (block_uid, description_update))| InsertableAssetDescription {
+                uid: asset_descriptions_next_uid + update_idx as i64,
+                superseded_by: -1,
+                block_uid: *block_uid.clone(),
+                asset_id: description_update.asset_id.clone(),
+                asset_description: description_update.asset_description.clone(),
+            },
+        )
+        .collect_vec();
+
+    let mut asset_descriptions_grouped: HashMap<
+        InsertableAssetDescription,
+        Vec<InsertableAssetDescription>,
+    > = HashMap::new();
+
+    asset_descriptions_updates.into_iter().for_each(|update| {
+        let group = asset_descriptions_grouped
+            .entry(update.clone())
+            .or_insert(vec![]);
+        group.push(update);
+    });
+
+    let asset_descriptions_grouped = asset_descriptions_grouped.into_iter().collect_vec();
+
+    let asset_descriptions_grouped_with_uids_superseded_by = asset_descriptions_grouped
+        .into_iter()
+        .map(|(group_key, group)| {
+            let mut updates = group
+                .into_iter()
+                .sorted_by_key(|item| item.uid)
+                .collect::<Vec<InsertableAssetDescription>>();
+
+            let mut last_uid = std::i64::MAX - 1;
+            (
+                group_key,
+                updates
+                    .as_mut_slice()
+                    .iter_mut()
+                    .rev()
+                    .map(|cur| {
+                        cur.superseded_by = last_uid;
+                        last_uid = cur.uid;
+                        cur.to_owned()
+                    })
+                    .sorted_by_key(|item| item.uid)
+                    .collect(),
+            )
+        })
+        .collect::<Vec<(InsertableAssetDescription, Vec<InsertableAssetDescription>)>>();
+
+    let asset_descriptions_first_uids: Vec<AssetDescriptionOverride> =
+        asset_descriptions_grouped_with_uids_superseded_by
+            .iter()
+            .map(|(_, group)| {
+                let first = group.iter().next().unwrap().clone();
+                AssetDescriptionOverride {
+                    superseded_by: first.uid,
+                    asset_id: first.asset_id,
+                }
+            })
+            .collect();
+
+    repo.close_asset_descriptions_superseded_by(&asset_descriptions_first_uids)?;
+
+    let asset_descriptions_with_uids_superseded_by =
+        &asset_descriptions_grouped_with_uids_superseded_by
+            .clone()
+            .into_iter()
+            .flat_map(|(_, v)| v)
+            .sorted_by_key(|asset_descriptions| asset_descriptions.uid)
+            .collect_vec();
+
+    repo.insert_asset_descriptions(asset_descriptions_with_uids_superseded_by)?;
+
+    repo.set_asset_descriptions_next_update_uid(asset_descriptions_next_uid + updates_count as i64)
 }
 
 fn extract_issuers_balance_updates(
@@ -1546,6 +1888,10 @@ fn squash_microblocks<R: repo::RepoOperations>(storage: &R) -> Result<()> {
 
             storage.update_out_leasings_block_references(&key_block_uid)?;
 
+            storage.update_asset_names_block_references(&key_block_uid)?;
+
+            storage.update_asset_descriptions_block_references(&key_block_uid)?;
+
             storage.delete_microblocks()?;
 
             storage.change_block_id(&key_block_uid, &total_block_id)?;
@@ -1576,6 +1922,10 @@ where
     rollback_issuer_balances(repo, block_uid)?;
 
     rollback_out_leasings(repo, block_uid)?;
+
+    rollback_asset_names(repo, block_uid)?;
+
+    rollback_asset_descriptions(repo, block_uid)?;
 
     repo.rollback_blocks_microblocks(&block_uid)?;
 
@@ -1699,6 +2049,43 @@ fn rollback_out_leasings<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> R
     repo.reopen_out_leasings_superseded_by(&lowest_deleted_uids)
 }
 
+fn rollback_asset_names<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+    let deleted = repo.rollback_asset_names(&block_uid)?;
+
+    let mut grouped_deleted: HashMap<DeletedAssetName, Vec<DeletedAssetName>> = HashMap::new();
+
+    deleted.into_iter().for_each(|item| {
+        let group = grouped_deleted.entry(item.clone()).or_insert(vec![]);
+        group.push(item);
+    });
+
+    let lowest_deleted_uids: Vec<i64> = grouped_deleted
+        .into_iter()
+        .filter_map(|(_, group)| group.into_iter().min_by_key(|i| i.uid).map(|i| i.uid))
+        .collect();
+
+    repo.reopen_asset_names_superseded_by(&lowest_deleted_uids)
+}
+
+fn rollback_asset_descriptions<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+    let deleted = repo.rollback_asset_descriptions(&block_uid)?;
+
+    let mut grouped_deleted: HashMap<DeletedAssetDescription, Vec<DeletedAssetDescription>> =
+        HashMap::new();
+
+    deleted.into_iter().for_each(|item| {
+        let group = grouped_deleted.entry(item.clone()).or_insert(vec![]);
+        group.push(item);
+    });
+
+    let lowest_deleted_uids: Vec<i64> = grouped_deleted
+        .into_iter()
+        .filter_map(|(_, group)| group.into_iter().min_by_key(|i| i.uid).map(|i| i.uid))
+        .collect();
+
+    repo.reopen_asset_descriptions_superseded_by(&lowest_deleted_uids)
+}
+
 fn escape_unicode_null(s: &str) -> String {
     s.replace("\0", "\\0")
 }
@@ -1758,6 +2145,14 @@ fn is_asset_labels_data_entry(key: &str) -> bool {
 
 fn is_asset_ticker_data_entry(key: &str) -> bool {
     key.starts_with("%s%s__assetId2ticker__")
+}
+
+fn is_asset_name_data_entry(key: &str) -> bool {
+    key.starts_with("%s%s__assetName__")
+}
+
+fn is_asset_description_data_entry(key: &str) -> bool {
+    key.starts_with("%s%s__assetDescription__")
 }
 
 fn parse_asset_labels(value: &str) -> Vec<String> {
