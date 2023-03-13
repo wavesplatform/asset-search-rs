@@ -686,7 +686,8 @@ fn extract_base_asset_info_updates(
 
     let update_time_stamp = match append.time_stamp {
         Some(time_stamp) => DateTime::from_utc(
-            NaiveDateTime::from_timestamp(time_stamp / 1000, time_stamp as u32 % 1000 * 1000),
+            NaiveDateTime::from_timestamp_opt(time_stamp / 1000, time_stamp as u32 % 1000 * 1000)
+                .expect("invalid timestamp data"),
             Utc,
         ),
         None => Utc::now(),
@@ -713,10 +714,11 @@ fn extract_base_asset_info_updates(
                             Some(stx) => match stx {
                                 Transaction::WavesTransaction(WavesTx { timestamp, .. }) => {
                                     DateTime::from_utc(
-                                        NaiveDateTime::from_timestamp(
+                                        NaiveDateTime::from_timestamp_opt(
                                             timestamp / 1000,
                                             *timestamp as u32 % 1000 * 1000,
-                                        ),
+                                        )
+                                        .expect("invalid timestamp data"),
                                         Utc,
                                     )
                                 }
@@ -886,7 +888,8 @@ fn extract_asset_related_data_entries_updates(
                         &de.key,
                     );
                     let time_stamp = DateTime::from_utc(
-                        NaiveDateTime::from_timestamp(transaction.timestamp / 1000, 0),
+                        NaiveDateTime::from_timestamp_opt(transaction.timestamp / 1000, 0)
+                            .expect("invalid timestamp data"),
                         Utc,
                     );
 
@@ -1601,10 +1604,11 @@ fn extract_issuers_balance_updates(
                         {
                             let updated_at = match &time_stamp {
                                 Some(timestamp) => DateTime::from_utc(
-                                    NaiveDateTime::from_timestamp(
+                                    NaiveDateTime::from_timestamp_opt(
                                         timestamp / 1000,
                                         *timestamp as u32 % 1000 * 1000,
-                                    ),
+                                    )
+                                    .expect("invalid timestamp data"),
                                     Utc,
                                 ),
                                 _ => Utc::now(),
@@ -1749,10 +1753,11 @@ fn extract_out_leasing_updates(append: &BlockMicroblockAppend) -> Vec<OutLeasing
             if leasing_update.out_after != leasing_update.out_before {
                 let updated_at = match append.time_stamp {
                     Some(time_stamp) => DateTime::from_utc(
-                        NaiveDateTime::from_timestamp(
+                        NaiveDateTime::from_timestamp_opt(
                             time_stamp / 1000,
                             time_stamp as u32 % 1000 * 1000,
-                        ),
+                        )
+                        .expect("invalid timestamp data"),
                         Utc,
                     ),
                     _ => Utc::now(),
