@@ -2,12 +2,16 @@ pub mod pg;
 
 use anyhow::Result;
 
-use super::models::asset::{
-    AssetOverride, DeletedAsset, InsertableAsset, OracleDataEntry, QueryableAsset,
+use crate::services::assets::repo::{Asset, OracleDataEntry, UserDefinedData};
+
+use super::models::asset::{AssetOverride, DeletedAsset, InsertableAsset};
+use super::models::asset_descriptions::{
+    AssetDescriptionOverride, DeletedAssetDescription, InsertableAssetDescription,
 };
 use super::models::asset_labels::{
     AssetLabels, AssetLabelsOverride, DeletedAssetLabels, InsertableAssetLabels,
 };
+use super::models::asset_names::{AssetNameOverride, DeletedAssetName, InsertableAssetName};
 use super::models::asset_tickers::{
     AssetTicker, AssetTickerOverride, DeletedAssetTicker, InsertableAssetTicker,
 };
@@ -21,11 +25,26 @@ use super::PrevHandledHeight;
 
 #[async_trait::async_trait]
 pub trait Repo {
+    type Operations: RepoOperations;
+
+    /// Execute some operations on a pooled connection without creating a database transaction.
+    async fn execute<F, R>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce(&Self::Operations) -> Result<R> + Send + 'static,
+        R: Send + 'static;
+
+    /// Execute some operations within a database transaction.
+    async fn transaction<F, R>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce(&Self::Operations) -> Result<R> + Send + 'static,
+        R: Clone + Send + 'static;
+}
+
+#[async_trait::async_trait]
+pub trait RepoOperations {
     //
     // COMMON
     //
-
-    fn transaction(&self, f: impl FnOnce() -> Result<()>) -> Result<()>;
 
     fn get_prev_handled_height(&self) -> Result<Option<PrevHandledHeight>>;
 
@@ -65,7 +84,7 @@ pub trait Repo {
 
     fn assets_gt_block_uid(&self, block_uid: &i64) -> Result<Vec<i64>>;
 
-    fn mget_assets(&self, uids: &[i64]) -> Result<Vec<Option<QueryableAsset>>>;
+    fn mget_assets(&self, uids: &[i64]) -> Result<Vec<Option<Asset>>>;
 
     fn assets_oracle_data_entries(
         &self,
@@ -73,7 +92,7 @@ pub trait Repo {
         oracle_address: &str,
     ) -> Result<Vec<OracleDataEntry>>;
 
-    fn issuer_assets(&self, issuer_address: impl AsRef<str>) -> Result<Vec<QueryableAsset>>;
+    fn issuer_assets(&self, issuer_address: impl AsRef<str>) -> Result<Vec<Asset>>;
 
     //
     // ASSET LABELS
@@ -173,4 +192,59 @@ pub trait Repo {
     fn set_out_leasings_next_update_uid(&self, new_uid: i64) -> Result<()>;
 
     fn rollback_out_leasings(&self, block_uid: &i64) -> Result<Vec<DeletedOutLeasing>>;
+
+    //
+    // ASSET_NAMES
+    //
+
+    fn get_next_asset_names_uid(&self) -> Result<i64>;
+
+    fn insert_asset_names(&self, balances: &Vec<InsertableAssetName>) -> Result<()>;
+
+    fn update_asset_names_block_references(&self, block_uid: &i64) -> Result<()>;
+
+    fn close_asset_names_superseded_by(&self, updates: &Vec<AssetNameOverride>) -> Result<()>;
+
+    fn reopen_asset_names_superseded_by(&self, current_superseded_by: &Vec<i64>) -> Result<()>;
+
+    fn set_asset_names_next_update_uid(&self, new_uid: i64) -> Result<()>;
+
+    fn rollback_asset_names(&self, block_uid: &i64) -> Result<Vec<DeletedAssetName>>;
+
+    //
+    // ASSET_DESCRIPTIONS
+    //
+
+    fn get_next_asset_descriptions_uid(&self) -> Result<i64>;
+
+    fn insert_asset_descriptions(&self, balances: &Vec<InsertableAssetDescription>) -> Result<()>;
+
+    fn update_asset_descriptions_block_references(&self, block_uid: &i64) -> Result<()>;
+
+    fn close_asset_descriptions_superseded_by(
+        &self,
+        updates: &Vec<AssetDescriptionOverride>,
+    ) -> Result<()>;
+
+    fn reopen_asset_descriptions_superseded_by(
+        &self,
+        current_superseded_by: &Vec<i64>,
+    ) -> Result<()>;
+
+    fn set_asset_descriptions_next_update_uid(&self, new_uid: i64) -> Result<()>;
+
+    fn rollback_asset_descriptions(&self, block_uid: &i64) -> Result<Vec<DeletedAssetDescription>>;
+
+    // Methods needed for updates redis cache
+    fn data_entries(
+        &self,
+        asset_ids: &[String],
+        oracle_address: String,
+    ) -> Result<Vec<OracleDataEntry>>;
+
+    fn mget_assets_by_ids(&self, ids: &[String]) -> Result<Vec<Option<Asset>>>;
+
+    fn mget_asset_user_defined_data(&self, asset_ids: &[String]) -> Result<Vec<UserDefinedData>>;
+
+    fn get_last_asset_ids_by_issuers(&self, issuers_ids: &[String]) -> Result<Vec<String>>;
 }

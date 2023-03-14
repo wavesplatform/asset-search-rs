@@ -47,6 +47,38 @@ table! {
 }
 
 table! {
+    asset_names (superseded_by, asset_id) {
+        uid -> Int8,
+        superseded_by -> Int8,
+        block_uid -> Int8,
+        asset_id -> Text,
+        asset_name -> Text,
+    }
+}
+
+table! {
+    asset_names_uid_seq (last_value) {
+        last_value -> BigInt,
+    }
+}
+
+table! {
+    asset_descriptions (superseded_by, asset_id) {
+        uid -> Int8,
+        superseded_by -> Int8,
+        block_uid -> Int8,
+        asset_id -> Text,
+        asset_description -> Text,
+    }
+}
+
+table! {
+    asset_descriptions_uid_seq (last_value) {
+        last_value -> BigInt,
+    }
+}
+
+table! {
     assets (superseded_by, id) {
         uid -> Int8,
         superseded_by -> Int8,
@@ -142,4 +174,6 @@ allow_tables_to_appear_in_same_query!(
     data_entries,
     issuer_balances,
     out_leasings,
+    asset_names,
+    asset_descriptions,
 );

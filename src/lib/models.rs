@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::cache::AssetBlockchainData;
 use crate::db::enums::DataEntryValueType;
 use crate::waves::{WAVES_ID, WAVES_NAME, WAVES_PRECISION};
 
@@ -96,6 +97,25 @@ pub struct BaseAssetInfoUpdate {
     pub quantity: i64,
     pub reissuable: bool,
     pub min_sponsored_fee: Option<i64>,
+}
+
+impl From<AssetBlockchainData> for BaseAssetInfoUpdate {
+    fn from(value: AssetBlockchainData) -> Self {
+        Self {
+            updated_at: Utc::now(),
+            update_height: value.height,
+            id: value.id.clone(),
+            issuer: value.issuer.clone(),
+            precision: value.precision,
+            nft: value.nft,
+            name: value.name.clone(),
+            description: value.description.clone(),
+            smart: value.smart,
+            quantity: value.quantity,
+            reissuable: value.reissuable,
+            min_sponsored_fee: value.min_sponsored_fee,
+        }
+    }
 }
 
 impl BaseAssetInfoUpdate {

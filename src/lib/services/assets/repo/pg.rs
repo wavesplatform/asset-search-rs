@@ -15,11 +15,11 @@ use crate::services::assets::repo::LabelFilter;
 const MAX_UID: i64 = i64::MAX - 1;
 
 lazy_static! {
-    static ref ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY: String =  format!("SELECT
+    pub(crate) static ref ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY: String = format!("SELECT
         a.id,
-        a.name,
+        coalesce(asn.asset_name, a.name) as name,
+        coalesce(asd.asset_description, a.description) as description,
         a.precision,
-        a.description,
         bm.height,
         (SELECT DATE_TRUNC('second', MIN(time_stamp)) FROM assets WHERE id = a.id) as timestamp,
         a.issuer,
@@ -33,10 +33,12 @@ lazy_static! {
         CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ol.amount END          AS sponsor_out_leasing
         FROM assets AS a
         LEFT JOIN blocks_microblocks bm ON (SELECT min(block_uid) FROM assets WHERE id = a.id) = bm.uid
-        LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = {}
-        LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = {}
-        LEFT JOIN asset_tickers ast ON a.id = ast.asset_id AND ast.superseded_by = {}
-    ", MAX_UID, MAX_UID, MAX_UID);
+        LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = {MAX_UID}
+        LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = {MAX_UID}
+        LEFT JOIN asset_tickers ast ON a.id = ast.asset_id AND ast.superseded_by = {MAX_UID}
+        LEFT JOIN asset_names asn ON a.id = asn.asset_id AND asn.superseded_by = {MAX_UID}
+        LEFT JOIN asset_descriptions asd ON a.id = asd.asset_id AND asd.superseded_by = {MAX_UID}
+    ", MAX_UID = MAX_UID);
 }
 
 pub struct PgRepo {
@@ -371,9 +373,9 @@ impl Repo for PgRepo {
     }
 }
 
-fn generate_assets_user_defined_data_base_sql_query() -> String {
+pub(crate) fn generate_assets_user_defined_data_base_sql_query() -> String {
     format!(
-        "SELECT 
+        "SELECT
         a.id as asset_id,
         ast.ticker,
         COALESCE(awl.labels, ARRAY[]::text[])  AS labels

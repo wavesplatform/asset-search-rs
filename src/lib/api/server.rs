@@ -9,10 +9,7 @@ use wavesexchange_log::{debug, error, info};
 use wavesexchange_warp::error::{
     error_handler_with_serde_qs, handler, internal, timeout, validation,
 };
-use wavesexchange_warp::{
-    endpoints::{livez, readyz, startz},
-    log::access,
-};
+use wavesexchange_warp::{log::access, MetricsWarpBuilder};
 
 use super::dtos::{escape_querystring_field, MgetRequest, RequestOptions, SearchRequest};
 use super::models::{Asset, AssetInfo, List};
@@ -23,6 +20,7 @@ use crate::services::assets::MgetOptions;
 
 pub async fn start(
     port: u16,
+    metrics_port: u16,
     assets_service: impl services::assets::Service + Send + Sync + 'static,
     images_service: impl services::images::Service + Send + Sync + 'static,
 ) {
@@ -104,10 +102,7 @@ pub async fn start(
 
     info!("Starting API server at 0.0.0.0:{}", port);
 
-    let routes = livez()
-        .or(readyz())
-        .or(startz())
-        .or(assets_get_handler)
+    let routes = assets_get_handler
         .or(assets_post_handler)
         .recover(move |rej| {
             error!("{:?}", rej);
@@ -115,7 +110,12 @@ pub async fn start(
         })
         .with(log);
 
-    warp::serve(routes).run(([0, 0, 0, 0], port)).await;
+    MetricsWarpBuilder::new()
+        .with_main_routes(routes)
+        .with_metrics_port(metrics_port)
+        .with_main_routes_port(port)
+        .run_async()
+        .await;
 }
 
 async fn assets_get_controller(

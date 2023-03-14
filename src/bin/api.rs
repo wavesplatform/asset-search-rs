@@ -34,16 +34,18 @@ async fn main() -> Result<()> {
             Arc::new(pg_repo),
             Box::new(assets_blockchain_data_redis_cache),
             Box::new(assets_user_defined_data_redis_cache),
-            &config.app.waves_association_address,
+            &config.app.asset_storage_address,
         )
     };
 
     let port = config.api.port;
+    let metrics_port = config.api.metrics_port;
 
     if config.api.image_service_bypass {
         info!("Bypassing Images service");
         api::server::start(
             port,
+            metrics_port,
             assets_service,
             app_lib::services::images::dummy::DummyService::new(),
         )
@@ -54,7 +56,7 @@ async fn main() -> Result<()> {
                 .with_user_agent("Asset search Service");
             app_lib::services::images::http::HttpService::new(images_api_client)
         };
-        api::server::start(port, assets_service, images_service).await;
+        api::server::start(port, metrics_port, assets_service, images_service).await;
     }
 
     Ok(())
