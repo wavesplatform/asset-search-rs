@@ -160,11 +160,17 @@ where
         + Sync
         + 'static,
 {
-    let prev_h = repo.execute(move |o| o.get_prev_handled_height(start_rollback_depth)).await?;
+    let prev_h = repo
+        .execute(move |o| o.get_prev_handled_height(start_rollback_depth))
+        .await?;
 
-    if prev_h.is_some() {
-        let last_uid = prev_h.as_ref().unwrap().uid.clone();
+    if let Some(prev_h) = prev_h.as_ref() {
+        info!(
+            "Rolling back to height {} (by {} blocks back)",
+            prev_h.height, start_rollback_depth
+        );
 
+        let last_uid = prev_h.uid;
         repo.transaction(move |o| rollback(o, last_uid)).await?;
     }
 
