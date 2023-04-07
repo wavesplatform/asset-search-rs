@@ -142,6 +142,7 @@ pub async fn start<T, R, CBD, CUDD>(
     max_wait_time_in_secs: u64,
     chain_id: u8,
     asset_storage_address: String,
+    start_rollback_depth: u32,
 ) -> Result<()>
 where
     T: UpdatesSource + Send + Sync + 'static,
@@ -159,11 +160,17 @@ where
         + Sync
         + 'static,
 {
-    let prev_h = repo.execute(|o| o.get_prev_handled_height()).await?;
+    let prev_h = repo
+        .execute(move |o| o.get_prev_handled_height(start_rollback_depth))
+        .await?;
 
-    if prev_h.is_some() {
-        let last_uid = prev_h.as_ref().unwrap().uid.clone();
+    if let Some(prev_h) = prev_h.as_ref() {
+        info!(
+            "Rolling back to height {} (by {} blocks back)",
+            prev_h.height, start_rollback_depth
+        );
 
+        let last_uid = prev_h.uid;
         repo.transaction(move |o| rollback(o, last_uid)).await?;
     }
 

@@ -47,6 +47,7 @@ async fn main() -> Result<()> {
         config.consumer.max_wait_time_in_secs,
         config.consumer.chain_id,
         config.consumer.asset_storage_address,
+        config.consumer.start_rollback_depth,
     );
 
     let metrics = MetricsWarpBuilder::new()
