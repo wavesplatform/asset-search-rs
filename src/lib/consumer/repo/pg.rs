@@ -82,14 +82,12 @@ impl RepoOperations for PgConnection {
     // COMMON
     //
 
-    fn get_prev_handled_height(&self) -> Result<Option<PrevHandledHeight>> {
+    fn get_prev_handled_height(&self, depth: u32) -> Result<Option<PrevHandledHeight>> {
+        let sql_height = format!("(select max(height) - {} from blocks_microblocks)", depth);
+
         blocks_microblocks::table
             .select((blocks_microblocks::uid, blocks_microblocks::height))
-            .filter(
-                blocks_microblocks::height.eq(diesel::expression::sql_literal::sql(
-                    "(select max(height) - 1 from blocks_microblocks)",
-                )),
-            )
+            .filter(blocks_microblocks::height.eq(sql(&sql_height)))
             .order(blocks_microblocks::uid.asc())
             .first(self)
             .optional()
