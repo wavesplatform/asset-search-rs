@@ -1475,7 +1475,7 @@ fn handle_asset_names_updates<R: repo::RepoOperations>(
 
     repo.insert_asset_names(asset_names_with_uids_superseded_by)?;
 
-    repo.set_asset_tickers_next_update_uid(asset_names_next_uid + updates_count as i64)
+    repo.set_asset_names_next_update_uid(asset_names_next_uid + updates_count as i64)
 }
 
 fn handle_asset_descriptions_updates<R: repo::RepoOperations>(
