@@ -104,7 +104,7 @@ impl Repo for PgRepo {
             // UNION
             let search_by_meta_query = format!("SELECT id, false AS smart, block_uid, ts_rank(to_tsvector('simple', name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN ticker IS NULL THEN 64 ELSE 128 END AS rank FROM asset_metadatas WHERE name ILIKE '{}%'", search, search_escaped_for_like);
             // UNION
-            let search_by_ticker_query = format!("SELECT a.id, a.smart, ({}) as block_uid, 32 AS rank FROM assets AS a LEFT JOIN asset_tickers AS ast ON a.id = ast.asset_id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND ast.ticker ILIKE '{}%'", min_block_uid_subquery, MAX_UID, MAX_UID, false, search_escaped_for_like);
+            let search_by_ticker_query = format!("SELECT a.id, a.smart, ({0}) as block_uid, CASE WHEN (ast.ticker = '{3}') THEN 64 ELSE 32 END AS rank FROM assets AS a LEFT JOIN asset_tickers AS ast ON a.id = ast.asset_id and ast.superseded_by = {1} WHERE a.superseded_by = {1} AND a.nft = {2} AND ast.ticker ILIKE '{3}%'", min_block_uid_subquery, MAX_UID, false, search_escaped_for_like);
             // UNION
             let tsquery_condition = {
                 let search_escaped_for_tsquery = utils::escape_for_tsquery(&search);
