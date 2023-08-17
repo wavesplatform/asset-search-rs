@@ -6,22 +6,26 @@ use std::convert::TryFrom;
 use std::str;
 use std::time::Instant;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use waves_protobuf_schemas::waves::{
-    block::Header as HeaderPB,
-    events::{
-        blockchain_updated::append::{
-            BlockAppend as BlockAppendPB, Body as BodyPB, MicroBlockAppend as MicroBlockAppendPB,
+use waves_protobuf_schemas::{
+    tonic,
+    waves::{
+        block::Header as HeaderPB,
+        events::{
+            blockchain_updated::append::{
+                BlockAppend as BlockAppendPB, Body as BodyPB,
+                MicroBlockAppend as MicroBlockAppendPB,
+            },
+            blockchain_updated::Append as AppendPB,
+            blockchain_updated::Update as UpdatePB,
+            grpc::{
+                blockchain_updates_api_client::BlockchainUpdatesApiClient,
+                SubscribeEvent as SubscribeEventPB, SubscribeRequest as SubscribeRequestPB,
+            },
+            BlockchainUpdated as BlockchainUpdatedPB,
         },
-        blockchain_updated::Append as AppendPB,
-        blockchain_updated::Update as UpdatePB,
-        grpc::{
-            blockchain_updates_api_client::BlockchainUpdatesApiClient,
-            SubscribeEvent as SubscribeEventPB, SubscribeRequest as SubscribeRequestPB,
-        },
-        BlockchainUpdated as BlockchainUpdatedPB,
+        Block as BlockPB, SignedMicroBlock as SignedMicroBlockPB,
+        SignedTransaction as SignedTransactionPB,
     },
-    Block as BlockPB, SignedMicroBlock as SignedMicroBlockPB,
-    SignedTransaction as SignedTransactionPB,
 };
 use wavesexchange_log::error;
 

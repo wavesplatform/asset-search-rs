@@ -100,11 +100,11 @@ impl Repo for PgRepo {
 
             let search_escaped_for_like = utils::escape_for_like(&search);
 
-            let search_by_id_query = format!("SELECT a.id, a.smart, ({}) as block_uid, CASE WHEN (ast.ticker IS NULL or ast.ticker = '') THEN 128 ELSE 256 END AS rank FROM assets AS a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND a.id ILIKE '{}'", min_block_uid_subquery, MAX_UID, MAX_UID, false, search_escaped_for_like);
+            let search_by_id_query = format!("SELECT a.id, a.smart, ({}) as block_uid, CASE WHEN (ast.ticker IS NULL or ast.ticker = '') THEN 128 ELSE 256 END AS rank FROM assets AS a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = false AND a.id ILIKE '{}'", min_block_uid_subquery, MAX_UID, MAX_UID, search_escaped_for_like);
             // UNION
             let search_by_meta_query = format!("SELECT id, false AS smart, block_uid, ts_rank(to_tsvector('simple', name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN ticker IS NULL THEN 64 ELSE 128 END AS rank FROM asset_metadatas WHERE name ILIKE '{}%'", search, search_escaped_for_like);
             // UNION
-            let search_by_ticker_query = format!("SELECT a.id, a.smart, ({}) as block_uid, 32 AS rank FROM assets AS a LEFT JOIN asset_tickers AS ast ON a.id = ast.asset_id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND ast.ticker ILIKE '{}%'", min_block_uid_subquery, MAX_UID, MAX_UID, false, search_escaped_for_like);
+            let search_by_ticker_query = format!("SELECT a.id, a.smart, ({0}) as block_uid, CASE WHEN (ast.ticker = '{2}') THEN 64 ELSE 32 END AS rank FROM assets AS a LEFT JOIN asset_tickers AS ast ON a.id = ast.asset_id and ast.superseded_by = {1} WHERE a.superseded_by = {1} AND a.nft = false AND ast.ticker ILIKE '{2}%'", min_block_uid_subquery, MAX_UID, search_escaped_for_like);
             // UNION
             let tsquery_condition = {
                 let search_escaped_for_tsquery = utils::escape_for_tsquery(&search);
@@ -117,9 +117,9 @@ impl Repo for PgRepo {
                     "1=1".to_owned()
                 }
             };
-            let search_by_tsquery_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN (ast.ticker IS NULL or ast.ticker = '') THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND {}", min_block_uid_subquery, search, MAX_UID, MAX_UID, false, tsquery_condition);
+            let search_by_tsquery_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN (ast.ticker IS NULL or ast.ticker = '') THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = false AND {}", min_block_uid_subquery, search, MAX_UID, MAX_UID, tsquery_condition);
             // UNION
-            let search_by_name_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN (ast.ticker IS NULL or ast.ticker = '') THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = {} AND a.name ILIKE '{}%'", min_block_uid_subquery, search, MAX_UID, MAX_UID, false, search_escaped_for_like);
+            let search_by_name_query = format!("SELECT a.id, a.smart, ({}) as block_uid, ts_rank(to_tsvector('simple', a.name), plainto_tsquery('simple', '{}'), 3) * CASE WHEN (ast.ticker IS NULL or ast.ticker = '') THEN 16 ELSE 32 END AS rank FROM assets a LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {} WHERE a.superseded_by = {} AND a.nft = false AND a.name ILIKE '{}%'", min_block_uid_subquery, search, MAX_UID, MAX_UID, search_escaped_for_like);
 
             let search_query_vec = vec![
                 search_by_id_query,
@@ -211,7 +211,7 @@ impl Repo for PgRepo {
                     a.id,
                     ROW_NUMBER() OVER (ORDER BY a.block_uid ASC, a.id ASC) AS rn
                 FROM
-                    (SELECT a.id, a.smart, (SELECT min(a1.block_uid) FROM assets a1 WHERE a1.id = a.id) AS block_uid, a.issuer FROM assets AS a WHERE a.superseded_by = {} AND a.nft = {}) AS a
+                    (SELECT a.id, a.smart, (SELECT min(a1.block_uid) FROM assets a1 WHERE a1.id = a.id) AS block_uid, a.issuer FROM assets AS a WHERE a.superseded_by = {} AND a.nft = false) AS a
                 LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {}
                 LEFT JOIN (
                     SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
@@ -229,7 +229,6 @@ impl Repo for PgRepo {
                 {}
                 ORDER BY a.block_uid ASC",
                 MAX_UID,
-                false,
                 MAX_UID,
                 MAX_UID,
                 conditions

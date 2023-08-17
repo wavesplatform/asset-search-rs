@@ -44,7 +44,7 @@ impl From<SearchRequest> for crate::services::assets::SearchRequest {
 fn validate_sql_valid(value: &String) -> Result<(), ValidationError> {
     if value
         .chars()
-        .all(|c| char::is_alphanumeric(c) || c == '_' || c == '*')
+        .all(|c| char::is_alphanumeric(c) || c == '_' || c == '*' || c== '-')
     {
         Ok(())
     } else {

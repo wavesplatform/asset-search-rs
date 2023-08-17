@@ -1,6 +1,7 @@
-FROM rust:1.59 AS builder
+FROM rust:1.69 as builder
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y protobuf-compiler
 RUN rustup component add rustfmt
 
 COPY Cargo.* ./
