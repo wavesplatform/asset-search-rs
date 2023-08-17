@@ -34,7 +34,7 @@ checksum = "bddcadddf5e9015d310179a59bb28c4d4b9920ad0f11e8e14dbadf654890c9a6"
 
 [[package]]
 name = "asset-search-rs"
-version = "2.2.1"
+version = "2.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
