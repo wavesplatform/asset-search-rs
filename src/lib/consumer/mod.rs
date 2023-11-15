@@ -303,8 +303,8 @@ where
                 acc_changed_ids.append(&mut changed_asset_ids);
             }
             UpdatesItem::Rollback(sig) => {
-                let block_uid = repo.clone().get_block_uid(&sig)?;
-                let mut changed_asset_ids = rollback(repo.clone(), block_uid)?;
+                let block_uid = repo.get_block_uid(&sig)?;
+                let mut changed_asset_ids = rollback(repo, block_uid)?;
                 acc_changed_ids.append(&mut changed_asset_ids);
             }
         }
@@ -799,7 +799,7 @@ fn handle_base_asset_info_updates<R: repo::RepoOperations>(
         .map(|(update_idx, (block_uid, update))| InsertableAsset {
             uid: assets_next_uid + update_idx as i64,
             superseded_by: -1,
-            block_uid: *block_uid.clone(),
+            block_uid: **block_uid,
             id: update.id.clone(),
             name: update.name.clone(),
             description: update.description.clone(),
@@ -973,7 +973,7 @@ fn handle_asset_related_data_entries_updates<R: repo::RepoOperations>(
             InsertableDataEntry {
                 uid: data_entries_next_uid + update_idx as i64,
                 superseded_by: -1,
-                block_uid: *block_uid.clone(),
+                block_uid: **block_uid,
                 address: update.address.clone(),
                 key: update.key.clone(),
                 data_type,
@@ -1231,7 +1231,7 @@ fn handle_asset_labels_updates<R: repo::RepoOperations>(
             |(update_idx, (block_uid, labels_update))| InsertableAssetLabels {
                 uid: asset_labels_next_uid + update_idx as i64,
                 superseded_by: -1,
-                block_uid: *block_uid.clone(),
+                block_uid: **block_uid,
                 asset_id: labels_update.asset_id.clone(),
                 labels: labels_update.labels.clone(),
             },
@@ -1319,7 +1319,7 @@ fn handle_asset_tickers_updates<R: repo::RepoOperations>(
             |(update_idx, (block_uid, tickers_update))| InsertableAssetTicker {
                 uid: asset_tickers_next_uid + update_idx as i64,
                 superseded_by: -1,
-                block_uid: *block_uid.clone(),
+                block_uid: **block_uid,
                 asset_id: tickers_update.asset_id.clone(),
                 ticker: tickers_update.ticker.clone(),
             },
@@ -1409,7 +1409,7 @@ fn handle_asset_names_updates<R: repo::RepoOperations>(
             |(update_idx, (block_uid, name_update))| InsertableAssetName {
                 uid: asset_names_next_uid + update_idx as i64,
                 superseded_by: -1,
-                block_uid: *block_uid.clone(),
+                block_uid: **block_uid,
                 asset_id: name_update.asset_id.clone(),
                 asset_name: name_update.asset_name.clone(),
             },
@@ -1497,7 +1497,7 @@ fn handle_asset_descriptions_updates<R: repo::RepoOperations>(
             |(update_idx, (block_uid, description_update))| InsertableAssetDescription {
                 uid: asset_descriptions_next_uid + update_idx as i64,
                 superseded_by: -1,
-                block_uid: *block_uid.clone(),
+                block_uid: **block_uid,
                 asset_id: description_update.asset_id.clone(),
                 asset_description: description_update.asset_description.clone(),
             },
@@ -1664,7 +1664,7 @@ fn handle_issuer_balances_updates<R: repo::RepoOperations>(
             |(update_idx, (block_uid, update))| InsertableIssuerBalance {
                 uid: issuer_balances_next_uid + update_idx as i64,
                 superseded_by: -1,
-                block_uid: *block_uid.clone(),
+                block_uid: **block_uid,
                 address: update.address.clone(),
                 regular_balance: update.new_regular_balance,
             },
@@ -1813,7 +1813,7 @@ fn handle_out_leasing_updates<R: repo::RepoOperations>(
         .map(|(update_idx, (block_uid, update))| InsertableOutLeasing {
             uid: out_leasings_next_uid + update_idx as i64,
             superseded_by: -1,
-            block_uid: *block_uid.clone(),
+            block_uid: **block_uid,
             address: update.address.clone(),
             amount: update.new_amount,
         })
