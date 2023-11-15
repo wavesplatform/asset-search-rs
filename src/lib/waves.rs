@@ -1,7 +1,6 @@
 use bytes::{BufMut, BytesMut};
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::convert::TryInto;
 
 lazy_static! {
     pub static ref ASSET_ORACLE_DATA_ENTRY_KEY_REGEX: Regex =
@@ -10,28 +9,17 @@ lazy_static! {
 
 pub fn keccak256(message: &[u8]) -> [u8; 32] {
     use sha3::{Digest, Keccak256};
-
     let mut hasher = Keccak256::new();
-
     hasher.update(message);
-
     hasher.finalize().into()
 }
 
 pub fn blake2b256(message: &[u8]) -> [u8; 32] {
-    use blake2::digest::Update;
-    use blake2::digest::VariableOutput;
-    use blake2::VarBlake2b;
-
-    let mut hasher = VarBlake2b::new(32).unwrap();
-
+    use blake2::{digest::consts::U32, Blake2b, Digest};
+    let mut hasher = Blake2b::<U32>::new();
     hasher.update(message);
-
-    let mut arr = [0u8; 32];
-
-    hasher.finalize_variable(|res| arr = res.try_into().unwrap());
-
-    arr
+    let res = hasher.finalize();
+    res.into()
 }
 
 pub struct Address(String);
