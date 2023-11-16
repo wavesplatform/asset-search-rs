@@ -40,7 +40,6 @@ pub trait Repo {
         R: Clone + Send + 'static;
 }
 
-#[async_trait::async_trait]
 pub trait RepoOperations {
     //
     // COMMON

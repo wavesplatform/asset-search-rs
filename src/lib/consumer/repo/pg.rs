@@ -76,7 +76,6 @@ impl Repo for PgRepoImpl {
     }
 }
 
-#[async_trait::async_trait]
 impl RepoOperations for PgConnection {
     //
     // COMMON
