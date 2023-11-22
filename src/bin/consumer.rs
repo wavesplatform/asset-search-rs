@@ -72,7 +72,7 @@ async fn main() -> Result<()> {
     );
 
     let readiness_channel = channel(
-        LivenessPostgresConfig::from(config.postgres),
+        LivenessPostgresConfig::from(config.postgres).0,
         POLL_INTERVAL_SECS,
         MAX_BLOCK_AGE,
     );
