@@ -90,6 +90,7 @@ dependencies = [
  "validator",
  "warp",
  "waves-protobuf-schemas",
+ "wavesexchange_liveness",
  "wavesexchange_log",
  "wavesexchange_warp",
 ]
@@ -2627,6 +2628,17 @@ dependencies = [
  "prost",
  "tonic",
  "tonic-build",
+]
+
+[[package]]
+name = "wavesexchange_liveness"
+version = "0.1.0"
+source = "git+https://github.com/waves-exchange/wavesexchange-rs?tag=wavesexchange_liveness/0.1.0#86308adaba44649a685598a9b65d011baccb0017"
+dependencies = [
+ "diesel",
+ "tokio",
+ "wavesexchange_log",
+ "wavesexchange_warp",
 ]
 
 [[package]]
