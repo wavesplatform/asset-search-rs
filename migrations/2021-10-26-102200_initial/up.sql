@@ -175,8 +175,8 @@ CREATE INDEX IF NOT EXISTS out_leasings_address_amount_partial_idx
     WHERE superseded_by = 9223372036854775806;
 
 
-CREATE OR REPLACE FUNCTION reopen_assets() RETURNS VOID 
-    language plpgsql 
+CREATE OR REPLACE FUNCTION reopen_assets() RETURNS VOID
+    language plpgsql
 AS $$
 BEGIN
     UPDATE
@@ -197,8 +197,8 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION reopen_data_entries() RETURNS VOID 
-    language plpgsql 
+CREATE OR REPLACE FUNCTION reopen_data_entries() RETURNS VOID
+    language plpgsql
 AS $$
 BEGIN
     UPDATE
@@ -219,8 +219,8 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION reopen_issuer_balances() RETURNS VOID 
-    language plpgsql 
+CREATE OR REPLACE FUNCTION reopen_issuer_balances() RETURNS VOID
+    language plpgsql
 AS $$
 BEGIN
     UPDATE
@@ -241,8 +241,8 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION reopen_out_leasings() RETURNS VOID 
-    language plpgsql 
+CREATE OR REPLACE FUNCTION reopen_out_leasings() RETURNS VOID
+    language plpgsql
 AS $$
 BEGIN
     UPDATE
@@ -263,9 +263,9 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION rollback_to(target_height INTEGER) RETURNS VOID 
-    language plpgsql 
-AS $$ 
+CREATE OR REPLACE FUNCTION rollback_to(target_height INTEGER) RETURNS VOID
+    language plpgsql
+AS $$
 BEGIN
     DELETE FROM blocks_microblocks WHERE height >= target_height;
 
