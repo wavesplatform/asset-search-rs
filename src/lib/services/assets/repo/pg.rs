@@ -5,12 +5,11 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use wavesexchange_log::error;
 
-use super::{Asset, AssetId, FindParams, OracleDataEntry, Repo, TickerFilter, ExtTickerFilter, UserDefinedData};
+use super::{Asset, AssetId, FindParams, OracleDataEntry, Repo, StringFilter, UserDefinedData};
 use crate::db::enums::DataEntryValueTypeMapping;
 use crate::db::PgPool;
 use crate::error::Error as AppError;
 use crate::schema::data_entries;
-use crate::services::assets::repo::LabelFilter;
 
 const MAX_UID: i64 = i64::MAX - 1;
 
@@ -132,11 +131,11 @@ impl Repo for PgRepo {
             ];
 
             match params.label.as_ref() {
-                Some(LabelFilter::One(label)) => {
+                Some(StringFilter::One(label)) => {
                     let label = utils::pg_escape(label);
                     conditions.push(format!("'{}' = ANY(labels)", label));
                 }
-                Some(LabelFilter::Any) => {
+                Some(StringFilter::Any) => {
                     conditions.push(format!("array_length(labels,1) > 0"));
                 }
                 None => {}
@@ -181,10 +180,10 @@ impl Repo for PgRepo {
             // search by ticker only if there is no searching by text
             if let Some(ticker) = params.ticker.as_ref() {
                 match ticker {
-                    TickerFilter::One(ticker) => {
+                    StringFilter::One(ticker) => {
                         conditions.push(format!("ast.ticker = '{}'", utils::pg_escape(ticker)));
                     }
-                    TickerFilter::Any => {
+                    StringFilter::Any => {
                         conditions.push(format!("ast.ticker IS NOT NULL AND ast.ticker != ''"));
                     }
                 }
@@ -193,10 +192,10 @@ impl Repo for PgRepo {
             // search by external ticker only if there is no searching by text
             if let Some(ext_ticker) = params.ext_ticker.as_ref() {
                 match ext_ticker {
-                    ExtTickerFilter::One(ext_ticker) => {
+                    StringFilter::One(ext_ticker) => {
                         conditions.push(format!("aste.ext_ticker = '{}'", utils::pg_escape(ext_ticker)));
                     }
-                    ExtTickerFilter::Any => {
+                    StringFilter::Any => {
                         conditions.push(format!("aste.ext_ticker IS NOT NULL AND aste.ext_ticker != ''"));
                     }
                 }
@@ -205,10 +204,10 @@ impl Repo for PgRepo {
             // search by label only if there is no searching by text
             if let Some(filter_label) = params.label.as_ref() {
                 match filter_label {
-                    LabelFilter::One(label) => {
+                    StringFilter::One(label) => {
                         conditions.push(format!("'{}' = ANY(labels)", utils::pg_escape(&label)));
                     }
-                    LabelFilter::Any => {
+                    StringFilter::Any => {
                         conditions.push(format!("array_length(labels,1) > 0"));
                     }
                 }
