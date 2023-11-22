@@ -30,8 +30,8 @@ pub struct AssetBlockchainData {
     pub sponsor_balance: Option<AssetSponsorBalance>,
 }
 
-impl From<&crate::models::AssetInfo> for AssetBlockchainData {
-    fn from(a: &crate::models::AssetInfo) -> Self {
+impl From<&AssetInfo> for AssetBlockchainData {
+    fn from(a: &AssetInfo) -> Self {
         Self {
             id: a.asset.id.clone(),
             name: a.asset.name.clone(),

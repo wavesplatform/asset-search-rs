@@ -214,7 +214,7 @@ where
                 Ok(handle_updates(
                     updates_with_height,
                     o,
-                    chain_id.clone(),
+                    chain_id,
                     wwa,
                 )?)
             })

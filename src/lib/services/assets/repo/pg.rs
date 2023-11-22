@@ -414,7 +414,7 @@ mod utils {
         p.replace_all(&query, "\\%").to_string()
     }
 
-    pub(super) fn pg_escape<'a>(text: &'a str) -> Cow<'a, str> {
+    pub(super) fn pg_escape(text: &str) -> Cow<str> {
         let bytes = text.as_bytes();
 
         let mut owned = None;

@@ -106,7 +106,7 @@ impl Asset {
                     }),
                 };
                 let metadata = AssetMetadata {
-                    has_image: has_image,
+                    has_image,
                     labels: asset_info.metadata.labels,
                     oracle_data: asset_info
                         .metadata
