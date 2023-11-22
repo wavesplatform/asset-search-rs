@@ -16,6 +16,7 @@ pub struct AssetBlockchainData {
     pub id: String,
     pub name: String,
     pub ticker: Option<String>,
+    pub ext_ticker: Option<String>,
     pub precision: i32,
     pub description: String,
     pub height: i32,
@@ -36,6 +37,7 @@ impl From<&AssetInfo> for AssetBlockchainData {
             id: a.asset.id.clone(),
             name: a.asset.name.clone(),
             ticker: a.asset.ticker.clone(),
+            ext_ticker: a.asset.ext_ticker.clone(),
             precision: a.asset.precision,
             description: a.asset.description.clone(),
             height: a.asset.height,
@@ -107,6 +109,7 @@ impl From<(&AssetBlockchainData, &AssetUserDefinedData)> for AssetInfo {
         Self {
             asset: Asset {
                 ticker: blockchain_data.ticker.clone(),
+                ext_ticker: blockchain_data.ext_ticker.clone(),
                 id: blockchain_data.id.clone(),
                 name: blockchain_data.name.clone(),
                 precision: blockchain_data.precision.clone(),

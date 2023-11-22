@@ -5,7 +5,7 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use wavesexchange_log::error;
 
-use super::{Asset, AssetId, FindParams, OracleDataEntry, Repo, TickerFilter, UserDefinedData};
+use super::{Asset, AssetId, FindParams, OracleDataEntry, Repo, TickerFilter, ExtTickerFilter, UserDefinedData};
 use crate::db::enums::DataEntryValueTypeMapping;
 use crate::db::PgPool;
 use crate::error::Error as AppError;
@@ -29,6 +29,7 @@ lazy_static! {
         a.smart,
         a.nft,
         ast.ticker,
+        aste.ext_ticker,
         CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ib.regular_balance END AS sponsor_regular_balance,
         CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ol.amount END          AS sponsor_out_leasing
         FROM assets AS a
@@ -36,6 +37,7 @@ lazy_static! {
         LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = {MAX_UID}
         LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = {MAX_UID}
         LEFT JOIN asset_tickers ast ON a.id = ast.asset_id AND ast.superseded_by = {MAX_UID}
+        LEFT JOIN asset_ext_tickers aste ON a.id = aste.asset_id AND aste.superseded_by = {MAX_UID}
         LEFT JOIN asset_names asn ON a.id = asn.asset_id AND asn.superseded_by = {MAX_UID}
         LEFT JOIN asset_descriptions asd ON a.id = asd.asset_id AND asd.superseded_by = {MAX_UID}
     ", MAX_UID = MAX_UID);
@@ -188,6 +190,18 @@ impl Repo for PgRepo {
                 }
             }
 
+            // search by external ticker only if there is no searching by text
+            if let Some(ext_ticker) = params.ext_ticker.as_ref() {
+                match ext_ticker {
+                    ExtTickerFilter::One(ext_ticker) => {
+                        conditions.push(format!("aste.ext_ticker = '{}'", utils::pg_escape(ext_ticker)));
+                    }
+                    ExtTickerFilter::Any => {
+                        conditions.push(format!("aste.ext_ticker IS NOT NULL AND aste.ext_ticker != ''"));
+                    }
+                }
+            }
+
             // search by label only if there is no searching by text
             if let Some(filter_label) = params.label.as_ref() {
                 match filter_label {
@@ -213,6 +227,7 @@ impl Repo for PgRepo {
                 FROM
                     (SELECT a.id, a.smart, (SELECT min(a1.block_uid) FROM assets a1 WHERE a1.id = a.id) AS block_uid, a.issuer FROM assets AS a WHERE a.superseded_by = {} AND a.nft = false) AS a
                 LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {}
+                LEFT JOIN asset_ext_tickers AS aste ON aste.asset_id = a.id and aste.superseded_by = {}
                 LEFT JOIN (
                     SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
                     FROM (
@@ -228,6 +243,7 @@ impl Repo for PgRepo {
                 ) AS awl ON awl.asset_id = a.id
                 {}
                 ORDER BY a.block_uid ASC",
+                MAX_UID,
                 MAX_UID,
                 MAX_UID,
                 MAX_UID,
@@ -377,9 +393,11 @@ pub(crate) fn generate_assets_user_defined_data_base_sql_query() -> String {
         "SELECT
         a.id as asset_id,
         ast.ticker,
+        aste.ext_ticker,
         COALESCE(awl.labels, ARRAY[]::text[])  AS labels
         FROM assets a
         LEFT JOIN asset_tickers ast ON a.id = ast.asset_id and ast.superseded_by = {}
+        LEFT JOIN asset_ext_tickers aste ON a.id = aste.asset_id and aste.superseded_by = {}
         LEFT JOIN (
             SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
             FROM (
@@ -394,7 +412,7 @@ pub(crate) fn generate_assets_user_defined_data_base_sql_query() -> String {
             GROUP BY asset_id
         ) AS awl ON awl.asset_id = a.id
     ",
-        MAX_UID, MAX_UID
+        MAX_UID, MAX_UID, MAX_UID
     )
 }
 

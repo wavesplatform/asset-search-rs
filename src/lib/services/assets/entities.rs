@@ -44,6 +44,8 @@ pub struct Asset {
     pub sponsor_out_leasing: Option<i64>,
     #[sql_type = "Nullable<Text>"]
     pub ticker: Option<String>,
+    #[sql_type = "Nullable<Text>"]
+    pub ext_ticker: Option<String>,
 }
 
 impl From<&Asset> for BaseAssetInfoUpdate {
@@ -74,6 +76,7 @@ impl AssetBlockchainData {
             id: asset.id.clone(),
             name: asset.name.clone(),
             ticker: asset.ticker.clone(),
+            ext_ticker: asset.ext_ticker.clone(),
             precision: asset.precision,
             description: asset.description.clone(),
             height: asset.height,
@@ -148,6 +151,7 @@ impl AssetBlockchainData {
             id: asset.id.clone(),
             name: asset.name.clone(),
             ticker: asset.ticker.clone(),
+            ext_ticker: asset.ext_ticker.clone(),
             precision: asset.precision,
             description: asset.description.clone(),
             height: asset.height,
@@ -196,6 +200,7 @@ impl AssetBlockchainData {
             id: asset.id.clone(),
             name: asset.name.clone(),
             ticker: asset.ticker.clone(),
+            ext_ticker: asset.ext_ticker.clone(),
             precision: asset.precision,
             description: asset.description.clone(),
             height: asset.height,
@@ -220,6 +225,8 @@ pub struct UserDefinedData {
     pub asset_id: String,
     #[sql_type = "Nullable<Text>"]
     pub ticker: Option<String>,
+    #[sql_type = "Nullable<Text>"]
+    pub ext_ticker: Option<String>,
     #[sql_type = "Array<Text>"]
     pub labels: Vec<String>,
 }

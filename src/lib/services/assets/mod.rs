@@ -15,7 +15,7 @@ use crate::models::AssetInfo;
 use crate::waves::{WAVES_DESCR, WAVES_ID};
 
 use entities::UserDefinedData;
-use repo::{FindParams, LabelFilter, TickerFilter};
+use repo::{FindParams, LabelFilter, TickerFilter, ExtTickerFilter};
 
 #[derive(Clone, Debug, Default)]
 pub struct GetOptions {
@@ -404,6 +404,13 @@ impl Service for AssetsService {
                     TickerFilter::Any
                 } else {
                     TickerFilter::One(ticker.to_owned())
+                }
+            }),
+            ext_ticker: req.ext_ticker.as_ref().map(|ext_ticker| {
+                if ext_ticker.as_str() == "*" {
+                    ExtTickerFilter::Any
+                } else {
+                    ExtTickerFilter::One(ext_ticker.to_owned())
                 }
             }),
             label: req.label.as_ref().map(|label| {

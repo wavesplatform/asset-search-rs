@@ -16,6 +16,7 @@ pub struct AssetId {
 pub struct FindParams {
     pub search: Option<String>,
     pub ticker: Option<TickerFilter>,
+    pub ext_ticker: Option<ExtTickerFilter>,
     pub label: Option<LabelFilter>,
     pub smart: Option<bool>,
     pub asset_label_in: Option<Vec<String>>,
@@ -29,6 +30,13 @@ pub enum TickerFilter {
     Any,
     One(String),
 }
+
+#[derive(Clone, Debug)]
+pub enum ExtTickerFilter {
+    Any,
+    One(String),
+}
+
 #[derive(Clone, Debug)]
 pub enum LabelFilter {
     Any,

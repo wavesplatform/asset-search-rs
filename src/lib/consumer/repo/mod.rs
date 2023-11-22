@@ -15,6 +15,9 @@ use super::models::asset_names::{AssetNameOverride, DeletedAssetName, Insertable
 use super::models::asset_tickers::{
     AssetTicker, AssetTickerOverride, DeletedAssetTicker, InsertableAssetTicker,
 };
+use super::models::asset_tickers_ext::{
+    AssetExtTicker, AssetExtTickerOverride, DeletedAssetExtTicker, InsertableAssetExtTicker,
+};
 use super::models::block_microblock::BlockMicroblock;
 use super::models::data_entry::{DataEntryOverride, DeletedDataEntry, InsertableDataEntry};
 use super::models::issuer_balance::{
@@ -132,6 +135,26 @@ pub trait RepoOperations {
     fn set_asset_tickers_next_update_uid(&self, new_uid: i64) -> Result<()>;
 
     fn rollback_asset_tickers(&self, block_uid: &i64) -> Result<Vec<DeletedAssetTicker>>;
+
+    //
+    // ASSET EXTERNAL TICKERS
+    //
+
+    fn mget_asset_ext_tickers(&self, asset_ids: &[&str]) -> Result<Vec<AssetExtTicker>>;
+
+    fn get_next_asset_ext_tickers_uid(&self) -> Result<i64>;
+
+    fn insert_asset_ext_tickers(&self, updates: &Vec<InsertableAssetExtTicker>) -> Result<()>;
+
+    fn update_asset_ext_tickers_block_references(&self, block_uid: &i64) -> Result<()>;
+
+    fn close_asset_ext_tickers_superseded_by(&self, updates: &Vec<AssetExtTickerOverride>) -> Result<()>;
+
+    fn reopen_asset_ext_tickers_superseded_by(&self, current_superseded_by: &Vec<i64>) -> Result<()>;
+
+    fn set_asset_ext_tickers_next_update_uid(&self, new_uid: i64) -> Result<()>;
+
+    fn rollback_asset_ext_tickers(&self, block_uid: &i64) -> Result<Vec<DeletedAssetExtTicker>>;
 
     //
     // DATA ENTRIES
