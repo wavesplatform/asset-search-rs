@@ -8,23 +8,25 @@ use app_lib::{
 use std::time::Duration;
 use tokio::select;
 use wavesexchange_liveness::channel;
-use wavesexchange_liveness::PostgresConfig as LivenessPostgresConfig;
+use wavesexchange_liveness::PostgresConfig;
 use wavesexchange_log::{error, info};
 use wavesexchange_warp::MetricsWarpBuilder;
 
 const POLL_INTERVAL_SECS: u64 = 60;
 const MAX_BLOCK_AGE: Duration = Duration::from_secs(300);
 
+struct LivenessPostgresConfig(PostgresConfig);
+
 impl From<config::postgres::Config> for LivenessPostgresConfig {
     fn from(config: config::postgres::Config) -> Self {
-        LivenessPostgresConfig {
+        LivenessPostgresConfig(PostgresConfig {
             host: config.host,
             port: config.port,
             database: config.database,
             user: config.user,
             password: config.password,
             poolsize: config.pool_size,
-        }
+        })
     }
 }
 
