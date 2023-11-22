@@ -6,7 +6,7 @@ fn default_port() -> u16 {
     6379
 }
 
-// redis username is empty by default (lagacy)
+// redis username is empty by default (legacy)
 // and authenticated using password only
 fn default_user() -> String {
     "".to_owned()

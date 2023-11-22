@@ -176,7 +176,7 @@ impl Repo for PgRepo {
                 conditions
             )
         } else {
-            // search by ticker only if there is not searching by text
+            // search by ticker only if there is no searching by text
             if let Some(ticker) = params.ticker.as_ref() {
                 match ticker {
                     TickerFilter::One(ticker) => {
@@ -188,7 +188,7 @@ impl Repo for PgRepo {
                 }
             }
 
-            // search by label only if there is not searching by text
+            // search by label only if there is no searching by text
             if let Some(filter_label) = params.label.as_ref() {
                 match filter_label {
                     LabelFilter::One(label) => {
