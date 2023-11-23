@@ -7,8 +7,8 @@ version = "2.3.0"
 anyhow = "1.0"
 async-trait = "0.1"
 base64 = "0.21"
-bb8 = "0.8"
-bb8-redis = "0.13"
+bb8 = { git = "https://github.com/Barre/bb8", branch = "multiplexed-connections" }
+bb8-redis = { git = "https://github.com/Barre/bb8", branch = "multiplexed-connections", features = ["multiplexed-connections"] }
 bigdecimal = { version = "0.4", features = ["serde"] }
 blake2 = "0.10"
 bs58 = "0.5"
@@ -24,7 +24,7 @@ itertools = "0.12"
 lazy_static = "1.4"
 percent-encoding = "2.1"
 r2d2 = "0.8"
-redis = { version = "0.23", features = ["aio", "tokio-comp", "r2d2"] }
+redis = { version = "0.21", features = ["tokio", "r2d2"] }
 regex = "1"
 reqwest = { version = "0.11", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
