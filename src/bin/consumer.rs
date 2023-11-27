@@ -8,7 +8,6 @@ use app_lib::{
 use std::time::Duration;
 use tokio::select;
 use wavesexchange_liveness::channel;
-use wavesexchange_liveness::PostgresConfig as LivenessPostgresConfig;
 use wavesexchange_log::{error, info};
 use wavesexchange_warp::MetricsWarpBuilder;
 
@@ -55,12 +54,8 @@ async fn main() -> Result<()> {
         config.consumer.asset_storage_address,
         config.consumer.start_rollback_depth,
     );
-
-    let readiness_channel = channel(
-        LivenessPostgresConfig::from(config.postgres),
-        POLL_INTERVAL_SECS,
-        MAX_BLOCK_AGE,
-    );
+    let db_url = config.postgres.database_url();
+    let readiness_channel = channel(db_url, POLL_INTERVAL_SECS, MAX_BLOCK_AGE);
 
     let metrics = tokio::spawn(async move {
         MetricsWarpBuilder::new()

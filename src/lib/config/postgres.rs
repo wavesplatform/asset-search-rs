@@ -1,5 +1,4 @@
 use serde::Deserialize;
-use wavesexchange_liveness::PostgresConfig as LivenessPostgresConfig;
 
 use crate::error::Error;
 
@@ -9,19 +8,6 @@ fn default_port() -> u16 {
 
 fn default_poolsize() -> u32 {
     1
-}
-
-impl From<Config> for LivenessPostgresConfig {
-    fn from(config: Config) -> Self {
-        LivenessPostgresConfig {
-            host: config.host,
-            port: config.port,
-            database: config.database,
-            user: config.user,
-            password: config.password,
-            poolsize: config.pool_size,
-        }
-    }
 }
 
 #[derive(Deserialize)]
@@ -44,6 +30,15 @@ pub struct Config {
     pub user: String,
     pub password: String,
     pub pool_size: u32,
+}
+
+impl Config {
+    pub fn database_url(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/{}",
+            self.user, self.password, self.host, self.port, self.database
+        )
+    }
 }
 
 pub fn load() -> Result<Config, Error> {
