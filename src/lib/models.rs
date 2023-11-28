@@ -27,6 +27,7 @@ pub struct Asset {
     pub smart: bool,
     pub nft: bool,
     pub ticker: Option<String>,
+    pub ext_ticker: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

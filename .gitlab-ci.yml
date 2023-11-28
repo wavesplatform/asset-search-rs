@@ -5,21 +5,12 @@ include:
   - project: "we-private/backend/common-ci"
     ref: ci
     file: "ci-functions/deploy_stages.yml"
-  - project: "we-private/backend/common-ci"
-    ref: ci
-    file: "ci-functions/migrations.yml"
 
 variables:
   APP_NAME: asset-search
   # CHART_LIST overrides the names of helm charts which are used in agrocd. If empty, then is equal to APP_NAME
   CHART_LIST: "asset-search asset-search-consumer"
-  DB_NAME: asset_search
-  MIGRATION_UP_CMD: /app/migration up
-  MIGRATION_DOWN_CMD: /app/migration down
 
 stages:
   - "Build docker image"
   - "Deploy to stage/test/dev"
-  - "Migrations-INIT"
-  - "Migrations-UP"
-  - "Migrations-DOWN"

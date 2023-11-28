@@ -27,6 +27,9 @@ use self::models::asset_descriptions::{
 use self::models::asset_labels::{AssetLabelsOverride, DeletedAssetLabels, InsertableAssetLabels};
 use self::models::asset_names::{AssetNameOverride, DeletedAssetName, InsertableAssetName};
 use self::models::asset_tickers::{AssetTickerOverride, DeletedAssetTicker, InsertableAssetTicker};
+use self::models::asset_tickers_ext::{
+    AssetExtTickerOverride, DeletedAssetExtTicker, InsertableAssetExtTicker,
+};
 use self::models::block_microblock::BlockMicroblock;
 use self::models::data_entry::{
     DataEntryOverride, DataEntryUpdate, DataEntryValue, DeletedDataEntry, InsertableDataEntry,
@@ -101,6 +104,12 @@ pub struct AssetLabelsUpdate {
 pub struct AssetTickerUpdate {
     pub asset_id: String,
     pub ticker: String,
+}
+
+#[derive(Debug)]
+pub struct AssetExtTickerUpdate {
+    pub asset_id: String,
+    pub ext_ticker: String,
 }
 
 #[derive(Debug)]
@@ -214,7 +223,7 @@ where
                 Ok(handle_updates(
                     updates_with_height,
                     o,
-                    chain_id.clone(),
+                    chain_id,
                     wwa,
                 )?)
             })
@@ -245,7 +254,7 @@ fn handle_updates<'a, R>(
     asset_storage_address: String,
 ) -> Result<Vec<String>>
 where
-    R: repo::RepoOperations,
+    R: RepoOperations,
 {
     let mut upd = vec![];
     updates_with_height
@@ -256,7 +265,7 @@ where
                 info!("Handle block {}, height = {}", b.id, b.height);
                 let len = acc.len();
                 if acc.len() > 0 {
-                    match acc.iter_mut().nth(len as usize - 1).unwrap() {
+                    match acc.iter_mut().nth(len - 1).unwrap() {
                         UpdatesItem::Blocks(v) => {
                             v.push(b);
                             acc
@@ -303,8 +312,8 @@ where
                 acc_changed_ids.append(&mut changed_asset_ids);
             }
             UpdatesItem::Rollback(sig) => {
-                let block_uid = repo.clone().get_block_uid(&sig)?;
-                let mut changed_asset_ids = rollback(repo.clone(), block_uid)?;
+                let block_uid = repo.get_block_uid(&sig)?;
+                let mut changed_asset_ids = rollback(repo, block_uid)?;
                 acc_changed_ids.append(&mut changed_asset_ids);
             }
         }
@@ -320,7 +329,7 @@ fn handle_appends<'a, R>(
     asset_storage_address: String,
 ) -> Result<Vec<String>>
 where
-    R: repo::RepoOperations,
+    R: RepoOperations,
 {
     let mut changed_issuers: Vec<String> = vec![];
     let mut changed_asset_ids: Vec<String> = vec![];
@@ -463,6 +472,38 @@ where
     info!(
         "handled {} asset tickers updates",
         asset_tickers_updates_with_block_uids.len()
+    );
+
+    // Handle asset external tickers updates
+    timer!("asset external tickers updates handling");
+
+    let asset_ext_tickers_updates_with_block_uids: Vec<(&i64, AssetExtTickerUpdate)> =
+        block_uids_with_appends
+            .iter()
+            .flat_map(|(block_uid, append)| {
+                append
+                    .txs
+                    .iter()
+                    .flat_map(|tx| {
+                        extract_asset_ext_tickers_updates(
+                            append.height as i32,
+                            tx,
+                            asset_storage_address.clone(),
+                        )
+                    })
+                    .map(|u| {
+                        changed_asset_ids.push(u.asset_id.clone());
+                        (block_uid, u)
+                    })
+                    .collect_vec()
+            })
+            .collect();
+
+    handle_asset_ext_tickers_updates(repo, &asset_ext_tickers_updates_with_block_uids)?;
+
+    info!(
+        "handled {} asset external tickers updates",
+        asset_ext_tickers_updates_with_block_uids.len()
     );
 
     // Handle asset names updates
@@ -617,7 +658,7 @@ async fn update_redis_cache_from_db<'a, R, CBD, CUDD>(
     asset_storage_address: String,
 ) -> Result<()>
 where
-    R: repo::Repo,
+    R: Repo,
     CBD: SyncReadCache<AssetBlockchainData> + SyncWriteCache<AssetBlockchainData> + Clone,
     CUDD: SyncReadCache<AssetUserDefinedData> + SyncWriteCache<AssetUserDefinedData> + Clone,
 {
@@ -692,7 +733,7 @@ fn extract_base_asset_info_updates(
     let mut asset_updates = vec![];
 
     let update_time_stamp = match append.time_stamp {
-        Some(time_stamp) => DateTime::from_utc(
+        Some(time_stamp) => DateTime::from_naive_utc_and_offset(
             NaiveDateTime::from_timestamp_opt(time_stamp / 1000, time_stamp as u32 % 1000 * 1000)
                 .expect("invalid timestamp data"),
             Utc,
@@ -720,7 +761,7 @@ fn extract_base_asset_info_updates(
                         let time_stamp = match tx.data.transaction.as_ref() {
                             Some(stx) => match stx {
                                 Transaction::WavesTransaction(WavesTx { timestamp, .. }) => {
-                                    DateTime::from_utc(
+                                    DateTime::from_naive_utc_and_offset(
                                         NaiveDateTime::from_timestamp_opt(
                                             timestamp / 1000,
                                             *timestamp as u32 % 1000 * 1000,
@@ -771,7 +812,7 @@ fn extract_base_asset_info_updates(
     asset_updates
 }
 
-fn handle_base_asset_info_updates<R: repo::RepoOperations>(
+fn handle_base_asset_info_updates<R: RepoOperations>(
     repo: &R,
     updates: &[(&i64, BaseAssetInfoUpdate)],
 ) -> Result<()> {
@@ -799,7 +840,7 @@ fn handle_base_asset_info_updates<R: repo::RepoOperations>(
         .map(|(update_idx, (block_uid, update))| InsertableAsset {
             uid: assets_next_uid + update_idx as i64,
             superseded_by: -1,
-            block_uid: *block_uid.clone(),
+            block_uid: **block_uid,
             id: update.id.clone(),
             name: update.name.clone(),
             description: update.description.clone(),
@@ -831,7 +872,7 @@ fn handle_base_asset_info_updates<R: repo::RepoOperations>(
                 .sorted_by_key(|item| item.uid)
                 .collect::<Vec<InsertableAsset>>();
 
-            let mut last_uid = std::i64::MAX - 1;
+            let mut last_uid = i64::MAX - 1;
             (
                 group_key,
                 updates
@@ -894,7 +935,7 @@ fn extract_asset_related_data_entries_updates(
                         &KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES,
                         &de.key,
                     );
-                    let time_stamp = DateTime::from_utc(
+                    let time_stamp = DateTime::from_naive_utc_and_offset(
                         NaiveDateTime::from_timestamp_opt(transaction.timestamp / 1000, 0)
                             .expect("invalid timestamp data"),
                         Utc,
@@ -923,7 +964,7 @@ fn extract_asset_related_data_entries_updates(
         .collect_vec()
 }
 
-fn handle_asset_related_data_entries_updates<R: repo::RepoOperations>(
+fn handle_asset_related_data_entries_updates<R: RepoOperations>(
     repo: &R,
     updates: &[(&i64, DataEntryUpdate)],
 ) -> Result<()> {
@@ -973,7 +1014,7 @@ fn handle_asset_related_data_entries_updates<R: repo::RepoOperations>(
             InsertableDataEntry {
                 uid: data_entries_next_uid + update_idx as i64,
                 superseded_by: -1,
-                block_uid: *block_uid.clone(),
+                block_uid: **block_uid,
                 address: update.address.clone(),
                 key: update.key.clone(),
                 data_type,
@@ -1004,7 +1045,7 @@ fn handle_asset_related_data_entries_updates<R: repo::RepoOperations>(
                 .sorted_by_key(|item| item.uid)
                 .collect::<Vec<InsertableDataEntry>>();
 
-            let mut last_uid = std::i64::MAX - 1;
+            let mut last_uid = i64::MAX - 1;
             (
                 group_key,
                 updates
@@ -1067,7 +1108,7 @@ fn extract_asset_name_updates(
                                 if asset_storage_address == oracle_address =>
                             {
                                 frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetNameUpdate {
-                                    asset_id: asset_id,
+                                    asset_id,
                                     asset_name: value.clone(),
                                 })
                             }
@@ -1108,7 +1149,7 @@ fn extract_asset_description_updates(
                             {
                                 frag_parse!("%s%s", de.key).map(|(_, asset_id)| {
                                     AssetDescriptionUpdate {
-                                        asset_id: asset_id,
+                                        asset_id,
                                         asset_description: value.clone(),
                                     }
                                 })
@@ -1149,7 +1190,7 @@ fn extract_asset_tickers_updates(
                                 if asset_storage_address == oracle_address =>
                             {
                                 frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetTickerUpdate {
-                                    asset_id: asset_id,
+                                    asset_id,
                                     ticker: value.clone(),
                                 })
                             }
@@ -1160,6 +1201,50 @@ fn extract_asset_tickers_updates(
                             frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetTickerUpdate {
                                 asset_id,
                                 ticker: "".into(),
+                            })
+                        }
+                    }
+                } else {
+                    None
+                }
+            })
+        })
+        .collect_vec()
+}
+
+fn extract_asset_ext_tickers_updates(
+    _height: i32,
+    tx: &Tx,
+    asset_storage_address: String,
+) -> Vec<AssetExtTickerUpdate> {
+    tx.state_update
+        .data_entries
+        .iter()
+        .filter_map(|data_entry_update| {
+            data_entry_update.data_entry.as_ref().and_then(|de| {
+                let oracle_address = bs58::encode(&data_entry_update.address).into_string();
+                if asset_storage_address == oracle_address
+                    && is_asset_external_ticker_data_entry(&de.key)
+                {
+                    match de.value.as_ref() {
+                        Some(value) => match value {
+                            Value::StringValue(value)
+                                if asset_storage_address == oracle_address =>
+                            {
+                                frag_parse!("%s%s", de.key).map(|(_, asset_id)| {
+                                    AssetExtTickerUpdate {
+                                        asset_id,
+                                        ext_ticker: value.clone(),
+                                    }
+                                })
+                            }
+                            _ => None,
+                        },
+                        // key was deleted -> drop asset ticker
+                        None => {
+                            frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetExtTickerUpdate {
+                                asset_id,
+                                ext_ticker: "".into(),
                             })
                         }
                     }
@@ -1212,7 +1297,7 @@ fn extract_asset_labels_updates(
         .collect_vec()
 }
 
-fn handle_asset_labels_updates<R: repo::RepoOperations>(
+fn handle_asset_labels_updates<R: RepoOperations>(
     repo: &R,
     updates: &[(&i64, AssetLabelsUpdate)],
 ) -> Result<()> {
@@ -1231,7 +1316,7 @@ fn handle_asset_labels_updates<R: repo::RepoOperations>(
             |(update_idx, (block_uid, labels_update))| InsertableAssetLabels {
                 uid: asset_labels_next_uid + update_idx as i64,
                 superseded_by: -1,
-                block_uid: *block_uid.clone(),
+                block_uid: **block_uid,
                 asset_id: labels_update.asset_id.clone(),
                 labels: labels_update.labels.clone(),
             },
@@ -1256,7 +1341,7 @@ fn handle_asset_labels_updates<R: repo::RepoOperations>(
                 .sorted_by_key(|item| item.uid)
                 .collect::<Vec<InsertableAssetLabels>>();
 
-            let mut last_uid = std::i64::MAX - 1;
+            let mut last_uid = i64::MAX - 1;
             (
                 group_key,
                 updates
@@ -1300,7 +1385,7 @@ fn handle_asset_labels_updates<R: repo::RepoOperations>(
     repo.set_asset_labels_next_update_uid(asset_labels_next_uid + updates_count as i64)
 }
 
-fn handle_asset_tickers_updates<R: repo::RepoOperations>(
+fn handle_asset_tickers_updates<R: RepoOperations>(
     repo: &R,
     updates: &[(&i64, AssetTickerUpdate)],
 ) -> Result<()> {
@@ -1319,7 +1404,7 @@ fn handle_asset_tickers_updates<R: repo::RepoOperations>(
             |(update_idx, (block_uid, tickers_update))| InsertableAssetTicker {
                 uid: asset_tickers_next_uid + update_idx as i64,
                 superseded_by: -1,
-                block_uid: *block_uid.clone(),
+                block_uid: **block_uid,
                 asset_id: tickers_update.asset_id.clone(),
                 ticker: tickers_update.ticker.clone(),
             },
@@ -1346,7 +1431,7 @@ fn handle_asset_tickers_updates<R: repo::RepoOperations>(
                 .sorted_by_key(|item| item.uid)
                 .collect::<Vec<InsertableAssetTicker>>();
 
-            let mut last_uid = std::i64::MAX - 1;
+            let mut last_uid = i64::MAX - 1;
             (
                 group_key,
                 updates
@@ -1390,7 +1475,100 @@ fn handle_asset_tickers_updates<R: repo::RepoOperations>(
     repo.set_asset_tickers_next_update_uid(asset_tickers_next_uid + updates_count as i64)
 }
 
-fn handle_asset_names_updates<R: repo::RepoOperations>(
+fn handle_asset_ext_tickers_updates<R: RepoOperations>(
+    repo: &R,
+    updates: &[(&i64, AssetExtTickerUpdate)],
+) -> Result<()> {
+    if updates.is_empty() {
+        return Ok(());
+    }
+
+    let updates_count = updates.len();
+
+    let asset_ext_tickers_next_uid = repo.get_next_asset_ext_tickers_uid()?;
+
+    let asset_ext_tickers_updates = updates
+        .iter()
+        .enumerate()
+        .map(
+            |(update_idx, (block_uid, ext_tickers_update))| InsertableAssetExtTicker {
+                uid: asset_ext_tickers_next_uid + update_idx as i64,
+                superseded_by: -1,
+                block_uid: **block_uid,
+                asset_id: ext_tickers_update.asset_id.clone(),
+                ext_ticker: ext_tickers_update.ext_ticker.clone(),
+            },
+        )
+        .collect_vec();
+
+    let mut asset_ext_tickers_grouped: HashMap<
+        InsertableAssetExtTicker,
+        Vec<InsertableAssetExtTicker>,
+    > = HashMap::new();
+
+    asset_ext_tickers_updates.into_iter().for_each(|update| {
+        let group = asset_ext_tickers_grouped
+            .entry(update.clone())
+            .or_insert(vec![]);
+        group.push(update);
+    });
+
+    let asset_ext_tickers_grouped = asset_ext_tickers_grouped.into_iter().collect_vec();
+
+    let asset_ext_tickers_grouped_with_uids_superseded_by = asset_ext_tickers_grouped
+        .into_iter()
+        .map(|(group_key, group)| {
+            let mut updates = group
+                .into_iter()
+                .sorted_by_key(|item| item.uid)
+                .collect::<Vec<InsertableAssetExtTicker>>();
+
+            let mut last_uid = i64::MAX - 1;
+            (
+                group_key,
+                updates
+                    .as_mut_slice()
+                    .iter_mut()
+                    .rev()
+                    .map(|cur| {
+                        cur.superseded_by = last_uid;
+                        last_uid = cur.uid;
+                        cur.to_owned()
+                    })
+                    .sorted_by_key(|item| item.uid)
+                    .collect(),
+            )
+        })
+        .collect::<Vec<(InsertableAssetExtTicker, Vec<InsertableAssetExtTicker>)>>();
+
+    let asset_ext_tickers_first_uids: Vec<AssetExtTickerOverride> =
+        asset_ext_tickers_grouped_with_uids_superseded_by
+            .iter()
+            .map(|(_, group)| {
+                let first = group.iter().next().unwrap().clone();
+                AssetExtTickerOverride {
+                    superseded_by: first.uid,
+                    asset_id: first.asset_id,
+                }
+            })
+            .collect();
+
+    repo.close_asset_ext_tickers_superseded_by(&asset_ext_tickers_first_uids)?;
+
+    let asset_ext_tickers_with_uids_superseded_by =
+        &asset_ext_tickers_grouped_with_uids_superseded_by
+            .clone()
+            .into_iter()
+            .flat_map(|(_, v)| v)
+            .sorted_by_key(|asset_ext_tickers| asset_ext_tickers.uid)
+            .collect_vec();
+
+    repo.insert_asset_ext_tickers(asset_ext_tickers_with_uids_superseded_by)?;
+
+    repo.set_asset_ext_tickers_next_update_uid(asset_ext_tickers_next_uid + updates_count as i64)
+}
+
+fn handle_asset_names_updates<R: RepoOperations>(
     repo: &R,
     updates: &[(&i64, AssetNameUpdate)],
 ) -> Result<()> {
@@ -1409,7 +1587,7 @@ fn handle_asset_names_updates<R: repo::RepoOperations>(
             |(update_idx, (block_uid, name_update))| InsertableAssetName {
                 uid: asset_names_next_uid + update_idx as i64,
                 superseded_by: -1,
-                block_uid: *block_uid.clone(),
+                block_uid: **block_uid,
                 asset_id: name_update.asset_id.clone(),
                 asset_name: name_update.asset_name.clone(),
             },
@@ -1434,7 +1612,7 @@ fn handle_asset_names_updates<R: repo::RepoOperations>(
                 .sorted_by_key(|item| item.uid)
                 .collect::<Vec<InsertableAssetName>>();
 
-            let mut last_uid = std::i64::MAX - 1;
+            let mut last_uid = i64::MAX - 1;
             (
                 group_key,
                 updates
@@ -1478,7 +1656,7 @@ fn handle_asset_names_updates<R: repo::RepoOperations>(
     repo.set_asset_names_next_update_uid(asset_names_next_uid + updates_count as i64)
 }
 
-fn handle_asset_descriptions_updates<R: repo::RepoOperations>(
+fn handle_asset_descriptions_updates<R: RepoOperations>(
     repo: &R,
     updates: &[(&i64, AssetDescriptionUpdate)],
 ) -> Result<()> {
@@ -1497,7 +1675,7 @@ fn handle_asset_descriptions_updates<R: repo::RepoOperations>(
             |(update_idx, (block_uid, description_update))| InsertableAssetDescription {
                 uid: asset_descriptions_next_uid + update_idx as i64,
                 superseded_by: -1,
-                block_uid: *block_uid.clone(),
+                block_uid: **block_uid,
                 asset_id: description_update.asset_id.clone(),
                 asset_description: description_update.asset_description.clone(),
             },
@@ -1526,7 +1704,7 @@ fn handle_asset_descriptions_updates<R: repo::RepoOperations>(
                 .sorted_by_key(|item| item.uid)
                 .collect::<Vec<InsertableAssetDescription>>();
 
-            let mut last_uid = std::i64::MAX - 1;
+            let mut last_uid = i64::MAX - 1;
             (
                 group_key,
                 updates
@@ -1610,7 +1788,7 @@ fn extract_issuers_balance_updates(
                             && balance_update.amount_before != amount_after.amount
                         {
                             let updated_at = match &time_stamp {
-                                Some(timestamp) => DateTime::from_utc(
+                                Some(timestamp) => DateTime::from_naive_utc_and_offset(
                                     NaiveDateTime::from_timestamp_opt(
                                         timestamp / 1000,
                                         *timestamp as u32 % 1000 * 1000,
@@ -1645,7 +1823,7 @@ fn extract_issuers_balance_updates(
     issuer_balance_updates.into_values().collect_vec()
 }
 
-fn handle_issuer_balances_updates<R: repo::RepoOperations>(
+fn handle_issuer_balances_updates<R: RepoOperations>(
     repo: &R,
     updates: &[(&i64, IssuerBalanceUpdate)],
 ) -> Result<()> {
@@ -1664,7 +1842,7 @@ fn handle_issuer_balances_updates<R: repo::RepoOperations>(
             |(update_idx, (block_uid, update))| InsertableIssuerBalance {
                 uid: issuer_balances_next_uid + update_idx as i64,
                 superseded_by: -1,
-                block_uid: *block_uid.clone(),
+                block_uid: **block_uid,
                 address: update.address.clone(),
                 regular_balance: update.new_regular_balance,
             },
@@ -1693,7 +1871,7 @@ fn handle_issuer_balances_updates<R: repo::RepoOperations>(
                 .sorted_by_key(|item| item.uid)
                 .collect::<Vec<InsertableIssuerBalance>>();
 
-            let mut last_uid = std::i64::MAX - 1;
+            let mut last_uid = i64::MAX - 1;
             (
                 group_key,
                 updates
@@ -1759,7 +1937,7 @@ fn extract_out_leasing_updates(append: &BlockMicroblockAppend) -> Vec<OutLeasing
             // handle out leasing changes only
             if leasing_update.out_after != leasing_update.out_before {
                 let updated_at = match append.time_stamp {
-                    Some(time_stamp) => DateTime::from_utc(
+                    Some(time_stamp) => DateTime::from_naive_utc_and_offset(
                         NaiveDateTime::from_timestamp_opt(
                             time_stamp / 1000,
                             time_stamp as u32 % 1000 * 1000,
@@ -1795,7 +1973,7 @@ fn extract_out_leasing_updates(append: &BlockMicroblockAppend) -> Vec<OutLeasing
     out_leasing_updates.into_values().collect_vec()
 }
 
-fn handle_out_leasing_updates<R: repo::RepoOperations>(
+fn handle_out_leasing_updates<R: RepoOperations>(
     repo: &R,
     updates: &[(&i64, OutLeasingUpdate)],
 ) -> Result<()> {
@@ -1813,7 +1991,7 @@ fn handle_out_leasing_updates<R: repo::RepoOperations>(
         .map(|(update_idx, (block_uid, update))| InsertableOutLeasing {
             uid: out_leasings_next_uid + update_idx as i64,
             superseded_by: -1,
-            block_uid: *block_uid.clone(),
+            block_uid: **block_uid,
             address: update.address.clone(),
             amount: update.new_amount,
         })
@@ -1837,7 +2015,7 @@ fn handle_out_leasing_updates<R: repo::RepoOperations>(
                 .sorted_by_key(|item| item.uid)
                 .collect::<Vec<InsertableOutLeasing>>();
 
-            let mut last_uid = std::i64::MAX - 1;
+            let mut last_uid = i64::MAX - 1;
             (
                 group_key,
                 updates
@@ -1881,7 +2059,7 @@ fn handle_out_leasing_updates<R: repo::RepoOperations>(
     repo.set_out_leasings_next_update_uid(out_leasings_next_uid + updates_count as i64)
 }
 
-fn squash_microblocks<R: repo::RepoOperations>(storage: &R) -> Result<()> {
+fn squash_microblocks<R: RepoOperations>(storage: &R) -> Result<()> {
     let total_block_id = storage.get_total_block_id()?;
 
     match total_block_id {
@@ -1893,6 +2071,8 @@ fn squash_microblocks<R: repo::RepoOperations>(storage: &R) -> Result<()> {
             storage.update_asset_labels_block_references(&key_block_uid)?;
 
             storage.update_asset_tickers_block_references(&key_block_uid)?;
+
+            storage.update_asset_ext_tickers_block_references(&key_block_uid)?;
 
             storage.update_data_entries_block_references(&key_block_uid)?;
 
@@ -1916,9 +2096,9 @@ fn squash_microblocks<R: repo::RepoOperations>(storage: &R) -> Result<()> {
 
 fn rollback<R>(repo: &R, block_uid: i64) -> Result<Vec<String>>
 where
-    R: repo::RepoOperations,
+    R: RepoOperations,
 {
-    debug!("rollbacking to block_uid = {}", block_uid);
+    debug!("rolling back to block_uid = {}", block_uid);
 
     // which assets have to be updated after rollback
     let assets_to_rollback = repo.assets_gt_block_uid(&block_uid)?;
@@ -1928,6 +2108,8 @@ where
     rollback_asset_labels(repo, block_uid)?;
 
     rollback_asset_tickers(repo, block_uid)?;
+
+    rollback_asset_ext_tickers(repo, block_uid)?;
 
     rollback_data_entries(repo, block_uid)?;
 
@@ -1952,7 +2134,7 @@ where
     Ok(assets_ids)
 }
 
-fn rollback_assets<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_assets<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_assets(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedAsset, Vec<DeletedAsset>> = HashMap::new();
@@ -1970,7 +2152,7 @@ fn rollback_assets<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> Result<
     repo.reopen_assets_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_asset_labels<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_asset_labels<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_asset_labels(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedAssetLabels, Vec<DeletedAssetLabels>> = HashMap::new();
@@ -1988,7 +2170,7 @@ fn rollback_asset_labels<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> R
     repo.reopen_asset_labels_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_asset_tickers<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_asset_tickers<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_asset_tickers(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedAssetTicker, Vec<DeletedAssetTicker>> = HashMap::new();
@@ -2006,7 +2188,26 @@ fn rollback_asset_tickers<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> 
     repo.reopen_asset_tickers_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_data_entries<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_asset_ext_tickers<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+    let deleted = repo.rollback_asset_ext_tickers(&block_uid)?;
+
+    let mut grouped_deleted: HashMap<DeletedAssetExtTicker, Vec<DeletedAssetExtTicker>> =
+        HashMap::new();
+
+    deleted.into_iter().for_each(|item| {
+        let group = grouped_deleted.entry(item.clone()).or_insert(vec![]);
+        group.push(item);
+    });
+
+    let lowest_deleted_uids: Vec<i64> = grouped_deleted
+        .into_iter()
+        .filter_map(|(_, group)| group.into_iter().min_by_key(|i| i.uid).map(|i| i.uid))
+        .collect();
+
+    repo.reopen_asset_ext_tickers_superseded_by(&lowest_deleted_uids)
+}
+
+fn rollback_data_entries<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_data_entries(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedDataEntry, Vec<DeletedDataEntry>> = HashMap::new();
@@ -2024,7 +2225,7 @@ fn rollback_data_entries<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> R
     repo.reopen_data_entries_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_issuer_balances<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_issuer_balances<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_issuer_balances(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedIssuerBalance, Vec<DeletedIssuerBalance>> =
@@ -2043,7 +2244,7 @@ fn rollback_issuer_balances<R: repo::RepoOperations>(repo: &R, block_uid: i64) -
     repo.reopen_issuer_balances_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_out_leasings<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_out_leasings<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_out_leasings(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedOutLeasing, Vec<DeletedOutLeasing>> = HashMap::new();
@@ -2061,7 +2262,7 @@ fn rollback_out_leasings<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> R
     repo.reopen_out_leasings_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_asset_names<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_asset_names<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_asset_names(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedAssetName, Vec<DeletedAssetName>> = HashMap::new();
@@ -2079,7 +2280,7 @@ fn rollback_asset_names<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> Re
     repo.reopen_asset_names_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_asset_descriptions<R: repo::RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_asset_descriptions<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_asset_descriptions(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedAssetDescription, Vec<DeletedAssetDescription>> =
@@ -2102,8 +2303,8 @@ fn escape_unicode_null(s: &str) -> String {
     s.replace("\0", "\\0")
 }
 
-impl From<&models::data_entry::DataEntryUpdate> for Option<AssetOracleDataEntry> {
-    fn from(v: &models::data_entry::DataEntryUpdate) -> Self {
+impl From<&DataEntryUpdate> for Option<AssetOracleDataEntry> {
+    fn from(v: &DataEntryUpdate) -> Self {
         v.related_asset_id.as_ref().and_then(|related_asset_id| {
             let (data_type, bin_val, bool_val, int_val, str_val) = match &v.value {
                 Some(DataEntryValue::BinVal(v)) => (
@@ -2157,6 +2358,10 @@ fn is_asset_labels_data_entry(key: &str) -> bool {
 
 fn is_asset_ticker_data_entry(key: &str) -> bool {
     key.starts_with("%s%s__assetId2ticker__")
+}
+
+fn is_asset_external_ticker_data_entry(key: &str) -> bool {
+    key.starts_with("%s%s__assetId2external__")
 }
 
 fn is_asset_name_data_entry(key: &str) -> bool {

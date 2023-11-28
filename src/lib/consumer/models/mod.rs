@@ -3,6 +3,7 @@ pub mod asset_descriptions;
 pub mod asset_labels;
 pub mod asset_names;
 pub mod asset_tickers;
+pub mod asset_tickers_ext;
 pub mod block_microblock;
 pub mod data_entry;
 pub mod issuer_balance;

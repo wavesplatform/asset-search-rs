@@ -49,7 +49,7 @@ impl Client for HttpClient {
 
     async fn has_svgs(&self, asset_ids: &[&str]) -> Result<Vec<bool>, Error> {
         let endpoint_url = format!("{}images_existence", &self.root_url);
-        let body = json!({ "images": asset_ids.clone().into_iter().map(|asset_id| format!("{}.svg", asset_id)).collect::<Vec<_>>() });
+        let body = json!({ "images": asset_ids.into_iter().map(|asset_id| format!("{}.svg", asset_id)).collect::<Vec<_>>() });
 
         let resp = self
             .client

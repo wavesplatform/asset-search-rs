@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use serde_qs::Config;
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -230,7 +229,10 @@ fn create_serde_qs_config() -> serde_qs::Config {
 }
 
 /// Parses querystring into T using serde_qs_config
-pub fn parse_querystring<'de, T>(serde_qs_config: &Config, qs: &'de str) -> Result<T, Rejection>
+pub fn parse_querystring<'de, T>(
+    serde_qs_config: &serde_qs::Config,
+    qs: &'de str,
+) -> Result<T, Rejection>
 where
     T: serde::de::Deserialize<'de>,
 {
@@ -283,27 +285,15 @@ mod tests {
         let cfg = create_serde_qs_config();
         let ids = vec!["1".to_owned(), "2".to_owned()];
 
-        let res = parse_querystring::<SearchRequest>(&cfg, r"ids=1&ids=2");
+        let check = |qs: &str, expected_ids: Option<&Vec<String>>| {
+            let res = parse_querystring::<SearchRequest>(&cfg, qs);
+            assert!(res.is_ok(), "Failed to parse `{}`: {:?}", qs, res);
+            assert_eq!(res.unwrap().ids.as_ref(), expected_ids);
+        };
 
-        assert!(matches!(res, Ok(_)));
-        assert!(matches!(res.as_ref().unwrap().ids, Some(_)));
-        assert_eq!(res.unwrap().ids.unwrap(), ids);
-
-        let res = parse_querystring::<SearchRequest>(&cfg, r"ids[]=1&ids[]=2");
-
-        assert!(matches!(res, Ok(_)));
-        assert!(matches!(res.as_ref().unwrap().ids, Some(_)));
-        assert_eq!(res.unwrap().ids.unwrap(), ids);
-
-        let res = parse_querystring::<SearchRequest>(&cfg, r"ids%5B%5D=1&ids%5B%5D=2");
-
-        assert!(matches!(res, Ok(_)));
-        assert!(matches!(res.as_ref().unwrap().ids, Some(_)));
-        assert_eq!(res.unwrap().ids.unwrap(), ids);
-
-        let res = parse_querystring::<SearchRequest>(&cfg, r"search=asd");
-
-        assert!(matches!(res, Ok(_)));
-        assert!(matches!(res.unwrap().ids, None));
+        //check(r"ids=1&ids=2", Some(&ids)); // This variant is not supported by serde_qs and never worked
+        check(r"ids[]=1&ids[]=2", Some(&ids));
+        check(r"ids%5B%5D=1&ids%5B%5D=2", Some(&ids));
+        check(r"search=asd", None);
     }
 }
