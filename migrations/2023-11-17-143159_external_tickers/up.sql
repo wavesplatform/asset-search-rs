@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS asset_ext_tickers (
     PRIMARY KEY (superseded_by, asset_id)
 );
 
-create index "asset_ext_tickers_block_uid_idx" on asset_ext_tickers(block_uid);
+-- create index "asset_ext_tickers_block_uid_idx" on asset_ext_tickers(block_uid);
 
 
 CREATE OR REPLACE FUNCTION reopen_asset_ext_tickers() RETURNS VOID
