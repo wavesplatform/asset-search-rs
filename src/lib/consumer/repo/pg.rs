@@ -1347,12 +1347,13 @@ impl RepoOperations for PgConnection {
         //use same query from api
         use crate::services::assets::repo::pg::ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY;
 
-        let sql = format!(
-            "{} WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = ANY($2) ORDER BY a.id, a.uid DESC)",
-            ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY.as_str()
-        );
+        let placeholder = "/*---WHERE---*/";
+        let condition = "WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = ANY($2) ORDER BY a.id, a.uid DESC)";
+        let query_text = ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY
+            .as_str()
+            .replace(placeholder, condition);
 
-        sql_query(&sql)
+        sql_query(&query_text)
             .bind::<BigInt, _>(MAX_UID)
             .bind::<Array<Text>, _>(ids)
             .get_results(self)

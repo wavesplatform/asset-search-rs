@@ -14,12 +14,24 @@ use crate::schema::data_entries;
 const MAX_UID: i64 = i64::MAX - 1;
 
 lazy_static! {
-    pub(crate) static ref ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY: String = format!("SELECT
+    /// This query has performance problems if the number of LEFT JOINs > 6.
+    /// Mitigated by moving core part of the query into WITH clause.
+    /// Might need further optimizations if more JOINs added later.
+    ///
+    /// The "/*---WHERE---*/" is a placeholder for string manipulations, do not remove!
+    pub(crate) static ref ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY: String = format!("
+        WITH assets_blocks_microblocks AS (
+                SELECT a.*, bm.height
+                FROM assets a
+                LEFT JOIN blocks_microblocks bm ON (SELECT min(block_uid) FROM assets WHERE id = a.id) = bm.uid
+                /*---WHERE---*/
+        )
+        SELECT
         a.id,
         coalesce(asn.asset_name, a.name) as name,
         coalesce(asd.asset_description, a.description) as description,
         a.precision,
-        bm.height,
+        a.height,
         (SELECT DATE_TRUNC('second', MIN(time_stamp)) FROM assets WHERE id = a.id) as timestamp,
         a.issuer,
         a.quantity,
@@ -31,8 +43,7 @@ lazy_static! {
         aste.ext_ticker,
         CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ib.regular_balance END AS sponsor_regular_balance,
         CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ol.amount END          AS sponsor_out_leasing
-        FROM assets AS a
-        LEFT JOIN blocks_microblocks bm ON (SELECT min(block_uid) FROM assets WHERE id = a.id) = bm.uid
+        FROM assets_blocks_microblocks AS a
         LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = {MAX_UID}
         LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = {MAX_UID}
         LEFT JOIN asset_tickers ast ON a.id = ast.asset_id AND ast.superseded_by = {MAX_UID}
@@ -276,12 +287,14 @@ impl Repo for PgRepo {
     }
 
     fn get(&self, id: &str) -> Result<Option<Asset>, AppError> {
-        let q = sql_query(&format!(
-            "{} WHERE a.uid = (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = $2 ORDER BY a.id, a.uid DESC LIMIT 1)",
-            ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY.as_str()
-        ))
-        .bind::<BigInt, _>(MAX_UID)
-        .bind::<Text, _>(id);
+        let placeholder = "/*---WHERE---*/";
+        let condition = "WHERE a.uid = (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = $2 ORDER BY a.id, a.uid DESC LIMIT 1)";
+        let query_text = ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY
+            .as_str()
+            .replace(placeholder, condition);
+        let q = sql_query(&query_text)
+            .bind::<BigInt, _>(MAX_UID)
+            .bind::<Text, _>(id);
 
         q.get_result(&self.pg_pool.get()?).optional().map_err(|e| {
             error!("{:?}", e);
@@ -290,12 +303,14 @@ impl Repo for PgRepo {
     }
 
     fn mget(&self, ids: &[&str]) -> Result<Vec<Option<Asset>>, AppError> {
-        let q = sql_query(&format!(
-            "{} WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = ANY($2) ORDER BY a.id, a.uid DESC)",
-            ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY.as_str()
-        ))
-        .bind::<BigInt, _>(MAX_UID)
-        .bind::<Array<Text>, _>(ids);
+        let placeholder = "/*---WHERE---*/";
+        let condition = "WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = ANY($2) ORDER BY a.id, a.uid DESC)";
+        let query_text = ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY
+            .as_str()
+            .replace(placeholder, condition);
+        let q = sql_query(&query_text)
+            .bind::<BigInt, _>(MAX_UID)
+            .bind::<Array<Text>, _>(ids);
 
         q.load(&self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
@@ -304,8 +319,12 @@ impl Repo for PgRepo {
     }
 
     fn mget_for_height(&self, ids: &[&str], height: i32) -> Result<Vec<Option<Asset>>, AppError> {
-        let q = sql_query(&format!("
-            {} WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.id = ANY($1) AND a.block_uid <= (SELECT uid FROM blocks_microblocks WHERE height = $2 LIMIT 1) ORDER BY a.id, a.uid DESC)", ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY.as_str()))
+        let placeholder = "/*---WHERE---*/";
+        let condition = "WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.id = ANY($1) AND a.block_uid <= (SELECT uid FROM blocks_microblocks WHERE height = $2 LIMIT 1) ORDER BY a.id, a.uid DESC)";
+        let query_text = ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY
+            .as_str()
+            .replace(placeholder, condition);
+        let q = sql_query(&query_text)
             .bind::<Array<Text>, _>(ids)
             .bind::<Integer, _>(height);
 
