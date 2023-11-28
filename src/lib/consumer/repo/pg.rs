@@ -46,12 +46,12 @@ const MAX_UID: i64 = std::i64::MAX - 1;
 const PG_MAX_INSERT_FIELDS_COUNT: usize = 65535;
 
 pub struct PgRepoImpl {
-    conn: Arc<Mutex<Option<Box<PgConnection>>>>,
+    conn: Arc<Mutex<PgConnection>>,
 }
 
 pub fn new(conn: PgConnection) -> PgRepoImpl {
     PgRepoImpl {
-        conn: Arc::new(Mutex::new(Some(Box::new(conn)))),
+        conn: Arc::new(Mutex::new(conn)),
     }
 }
 
@@ -69,10 +69,8 @@ impl Repo for PgRepoImpl {
     {
         let conn_arc = self.conn.clone();
         tokio::task::spawn_blocking(move || {
-            let mut conn_guard = conn_arc.lock().unwrap();
-            let mut conn = conn_guard.take().expect("connection is gone");
+            let mut conn = conn_arc.lock().unwrap();
             let result = f(&mut *conn);
-            *conn_guard = Some(conn);
             result
         })
         .await
@@ -86,10 +84,8 @@ impl Repo for PgRepoImpl {
     {
         let conn_arc = self.conn.clone();
         tokio::task::spawn_blocking(move || {
-            let mut conn_guard = conn_arc.lock().unwrap();
-            let mut conn = conn_guard.take().expect("connection is gone");
+            let mut conn = conn_arc.lock().unwrap();
             let result = conn.transaction(|conn| f(conn));
-            *conn_guard = Some(conn);
             result
         })
         .await
