@@ -9,7 +9,7 @@ pub struct AssetTicker {
 }
 
 #[derive(Clone, Debug, Insertable)]
-#[table_name = "asset_names"]
+#[diesel(table_name = asset_names)]
 pub struct InsertableAssetName {
     pub uid: i64,
     pub superseded_by: i64,

@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
 
     let updates_src = consumer::updates::new(&config.consumer.blockchain_updates_url).await?;
 
-    let pg_repo = consumer::repo::pg::new(conn);
+    let mut pg_repo = consumer::repo::pg::new(conn);
 
     let redis_pool = sync_redis::pool(&config.redis)?;
 
@@ -45,7 +45,7 @@ async fn main() -> Result<()> {
     let consumer = consumer::start(
         config.consumer.starting_height,
         updates_src,
-        &pg_repo,
+        &mut pg_repo,
         &blockchain_data_cache,
         &user_defined_data_cache,
         config.consumer.updates_per_request,

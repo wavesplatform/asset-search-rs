@@ -14,35 +14,35 @@ use crate::{
 
 #[derive(Clone, Debug, QueryableByName)]
 pub struct Asset {
-    #[sql_type = "Text"]
+    #[diesel(sql_type = Text)]
     pub id: String,
-    #[sql_type = "Text"]
+    #[diesel(sql_type = Text)]
     pub name: String,
-    #[sql_type = "Integer"]
+    #[diesel(sql_type = Integer)]
     pub precision: i32,
-    #[sql_type = "Text"]
+    #[diesel(sql_type = Text)]
     pub description: String,
-    #[sql_type = "Integer"]
+    #[diesel(sql_type = Integer)]
     pub height: i32,
-    #[sql_type = "Timestamptz"]
+    #[diesel(sql_type = Timestamptz)]
     pub timestamp: DateTime<Utc>,
-    #[sql_type = "Text"]
+    #[diesel(sql_type = Text)]
     pub issuer: String,
-    #[sql_type = "BigInt"]
+    #[diesel(sql_type = BigInt)]
     pub quantity: i64,
-    #[sql_type = "Bool"]
+    #[diesel(sql_type = Bool)]
     pub reissuable: bool,
-    #[sql_type = "Nullable<BigInt>"]
+    #[diesel(sql_type = Nullable<BigInt>)]
     pub min_sponsored_fee: Option<i64>,
-    #[sql_type = "Bool"]
+    #[diesel(sql_type = Bool)]
     pub smart: bool,
-    #[sql_type = "Bool"]
+    #[diesel(sql_type = Bool)]
     pub nft: bool,
-    #[sql_type = "Nullable<BigInt>"]
+    #[diesel(sql_type = Nullable<BigInt>)]
     pub sponsor_regular_balance: Option<i64>,
-    #[sql_type = "Nullable<BigInt>"]
+    #[diesel(sql_type = Nullable<BigInt>)]
     pub sponsor_out_leasing: Option<i64>,
-    #[sql_type = "Nullable<Text>"]
+    #[diesel(sql_type = Nullable<Text>)]
     pub ticker: Option<String>,
 }
 
@@ -216,11 +216,11 @@ impl AssetBlockchainData {
 
 #[derive(Clone, Debug, QueryableByName)]
 pub struct UserDefinedData {
-    #[sql_type = "Text"]
+    #[diesel(sql_type = Text)]
     pub asset_id: String,
-    #[sql_type = "Nullable<Text>"]
+    #[diesel(sql_type = Nullable<Text>)]
     pub ticker: Option<String>,
-    #[sql_type = "Array<Text>"]
+    #[diesel(sql_type = Array<Text>)]
     pub labels: Vec<String>,
 }
 

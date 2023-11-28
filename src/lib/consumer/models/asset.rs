@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use crate::schema::assets;
 
 #[derive(Clone, Debug, Insertable)]
-#[table_name = "assets"]
+#[diesel(table_name = assets)]
 pub struct InsertableAsset {
     pub uid: i64,
     pub superseded_by: i64,

@@ -254,7 +254,7 @@ impl Repo for PgRepo {
 
         let q = sql_query(sql).bind::<Integer, _>(params.limit as i32);
 
-        q.load(&self.pg_pool.get()?).map_err(|e| {
+        q.load(&mut self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
             AppError::from(e)
         })
@@ -268,10 +268,12 @@ impl Repo for PgRepo {
         .bind::<BigInt, _>(MAX_UID)
         .bind::<Text, _>(id);
 
-        q.get_result(&self.pg_pool.get()?).optional().map_err(|e| {
-            error!("{:?}", e);
-            AppError::from(e)
-        })
+        q.get_result(&mut self.pg_pool.get()?)
+            .optional()
+            .map_err(|e| {
+                error!("{:?}", e);
+                AppError::from(e)
+            })
     }
 
     fn mget(&self, ids: &[&str]) -> Result<Vec<Option<Asset>>, AppError> {
@@ -282,7 +284,7 @@ impl Repo for PgRepo {
         .bind::<BigInt, _>(MAX_UID)
         .bind::<Array<Text>, _>(ids);
 
-        q.load(&self.pg_pool.get()?).map_err(|e| {
+        q.load(&mut self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
             AppError::from(e)
         })
@@ -294,7 +296,7 @@ impl Repo for PgRepo {
             .bind::<Array<Text>, _>(ids)
             .bind::<Integer, _>(height);
 
-        q.load(&self.pg_pool.get()?).map_err(|e| {
+        q.load(&mut self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
             AppError::from(e)
         })
@@ -321,7 +323,7 @@ impl Repo for PgRepo {
             .filter(data_entries::related_asset_id.eq_any(asset_ids))
             .filter(data_entries::data_type.is_not_null());
 
-        q.load(&self.pg_pool.get()?).map_err(|e| {
+        q.load(&mut self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
             AppError::from(e)
         })
@@ -335,7 +337,7 @@ impl Repo for PgRepo {
         .bind::<Text, _>(asset_id)
         .bind::<BigInt, _>(MAX_UID);
 
-        q.get_result(&self.pg_pool.get()?).map_err(|e| {
+        q.get_result(&mut self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
             AppError::from(e)
         })
@@ -352,7 +354,7 @@ impl Repo for PgRepo {
         .bind::<Array<Text>, _>(asset_ids)
         .bind::<BigInt, _>(MAX_UID);
 
-        q.load(&self.pg_pool.get()?).map_err(|e| {
+        q.load(&mut self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
             AppError::from(e)
         })
@@ -365,7 +367,7 @@ impl Repo for PgRepo {
         ))
         .bind::<BigInt, _>(MAX_UID);
 
-        q.load(&self.pg_pool.get()?).map_err(|e| {
+        q.load(&mut self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
             AppError::from(e)
         })
