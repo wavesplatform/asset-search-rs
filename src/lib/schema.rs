@@ -47,6 +47,22 @@ table! {
 }
 
 table! {
+    asset_ext_tickers (superseded_by, asset_id) {
+        uid -> Int8,
+        superseded_by -> Int8,
+        block_uid -> Int8,
+        asset_id -> Text,
+        ext_ticker -> Text,
+    }
+}
+
+table! {
+    asset_ext_tickers_uid_seq (last_value) {
+        last_value -> BigInt,
+    }
+}
+
+table! {
     asset_names (superseded_by, asset_id) {
         uid -> Int8,
         superseded_by -> Int8,
@@ -176,4 +192,6 @@ allow_tables_to_appear_in_same_query!(
     out_leasings,
     asset_names,
     asset_descriptions,
+    asset_tickers,
+    asset_ext_tickers,
 );

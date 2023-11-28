@@ -34,6 +34,7 @@ pub enum AssetInfo {
 #[derive(Clone, Debug, Serialize)]
 pub struct FullAssetInfo {
     pub ticker: Option<String>,
+    pub ext_ticker: Option<String>,
     pub id: String,
     pub name: String,
     pub precision: i32,
@@ -97,6 +98,7 @@ impl Asset {
                         smart: asset_info.asset.smart,
                         min_sponsored_fee: asset_info.asset.min_sponsored_fee,
                         ticker: asset_info.asset.ticker,
+                        ext_ticker: asset_info.asset.ext_ticker,
                     }),
                     ResponseFormat::Brief => AssetInfo::Brief(BriefAssetInfo {
                         id: asset_info.asset.id,

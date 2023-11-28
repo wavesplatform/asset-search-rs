@@ -27,14 +27,17 @@ use crate::consumer::models::asset_names::{
 use crate::consumer::models::asset_tickers::{
     AssetTicker, AssetTickerOverride, DeletedAssetTicker, InsertableAssetTicker,
 };
+use crate::consumer::models::asset_tickers_ext::{
+    AssetExtTicker, AssetExtTickerOverride, DeletedAssetExtTicker, InsertableAssetExtTicker,
+};
 use crate::db::enums::DataEntryValueTypeMapping;
 use crate::error::Error as AppError;
 use crate::schema::{
-    asset_descriptions as asset_descriptions_diesel, asset_descriptions_uid_seq, asset_labels,
-    asset_labels_uid_seq, asset_names as asset_names_diesel, asset_names_uid_seq, asset_tickers,
-    asset_tickers_uid_seq, assets, assets_uid_seq, blocks_microblocks, data_entries,
-    data_entries_uid_seq, issuer_balances, issuer_balances_uid_seq, out_leasings,
-    out_leasings_uid_seq,
+    asset_descriptions as asset_descriptions_diesel, asset_descriptions_uid_seq, asset_ext_tickers,
+    asset_ext_tickers_uid_seq, asset_labels, asset_labels_uid_seq,
+    asset_names as asset_names_diesel, asset_names_uid_seq, asset_tickers, asset_tickers_uid_seq,
+    assets, assets_uid_seq, blocks_microblocks, data_entries, data_entries_uid_seq,
+    issuer_balances, issuer_balances_uid_seq, out_leasings, out_leasings_uid_seq,
 };
 use crate::services::assets::repo::pg::generate_assets_user_defined_data_base_sql_query;
 use crate::services::assets::repo::{Asset, OracleDataEntry, UserDefinedData};
@@ -378,6 +381,7 @@ impl RepoOperations for PgConnection {
             a.smart,
             a.nft,
             ast.ticker,
+            aste.ext_ticker,
             CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ib.regular_balance END AS sponsor_regular_balance,
             CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ol.amount END          AS sponsor_out_leasing
             FROM assets AS a
@@ -385,6 +389,7 @@ impl RepoOperations for PgConnection {
             LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = $1
             LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = $1
             LEFT JOIN asset_tickers ast ON a.id = ast.asset_id AND ast.superseded_by = $1
+            LEFT JOIN asset_ext_tickers aste ON a.id = aste.asset_id AND aste.superseded_by = $1
             WHERE a.superseded_by = $1 AND a.nft = $2 AND a.issuer = $3"
         )
         .bind::<BigInt, _>(MAX_UID)
@@ -629,6 +634,124 @@ impl RepoOperations for PgConnection {
             .map(|_| ())
             .map_err(|err| {
                 let context = format!("Cannot update asset_tickers block references: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    //
+    // ASSET EXTERNAL TICKERS
+    //
+
+    fn mget_asset_ext_tickers(&self, asset_ids: &[&str]) -> Result<Vec<AssetExtTicker>> {
+        let q = asset_ext_tickers::table
+            .select((asset_ext_tickers::asset_id, asset_ext_tickers::ext_ticker))
+            .filter(asset_ext_tickers::superseded_by.eq(MAX_UID))
+            .filter(asset_ext_tickers::asset_id.eq_any(asset_ids));
+
+        q.load(self).map_err(|err| {
+            let context = format!("Cannot assets external tickers: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
+    }
+
+    fn get_next_asset_ext_tickers_uid(&self) -> Result<i64> {
+        asset_ext_tickers_uid_seq::table
+            .select(asset_ext_tickers_uid_seq::last_value)
+            .first(self)
+            .map_err(|err| {
+                let context = format!("Cannot get next asset external tickers update uid: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn close_asset_ext_tickers_superseded_by(&self, updates: &Vec<AssetExtTickerOverride>) -> Result<()> {
+        let mut asset_ids = vec![];
+        let mut superseded_by_uids = vec![];
+
+        updates.iter().for_each(|u| {
+            asset_ids.push(&u.asset_id);
+            superseded_by_uids.push(&u.superseded_by);
+        });
+
+        let q = diesel::sql_query("UPDATE asset_ext_tickers SET superseded_by = updates.superseded_by FROM (SELECT UNNEST($1::text[]) as asset_id, UNNEST($2::int8[]) as superseded_by) AS updates WHERE asset_ext_tickers.asset_id = updates.asset_id AND asset_ext_tickers.superseded_by = $3;")
+            .bind::<Array<VarChar>, _>(asset_ids)
+            .bind::<Array<BigInt>, _>(superseded_by_uids)
+            .bind::<BigInt, _>(MAX_UID);
+
+        q.execute(self).map(|_| ()).map_err(|err| {
+            let context = format!("Cannot close asset_ext_tickers superseded_by: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
+    }
+
+    fn insert_asset_ext_tickers(&self, updates: &Vec<InsertableAssetExtTicker>) -> Result<()> {
+        let columns_count = asset_ext_tickers::table::all_columns().len();
+        let chunk_size = (PG_MAX_INSERT_FIELDS_COUNT / columns_count) / 10 * 10;
+        updates
+            .to_owned()
+            .chunks(chunk_size)
+            .into_iter()
+            .try_fold((), |_, chunk| {
+                diesel::insert_into(asset_ext_tickers::table)
+                    .values(chunk)
+                    .execute(self)
+                    .map(|_| ())
+            })
+            .map_err(|err| {
+                let context = format!("Cannot insert new asset external tickers: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn set_asset_ext_tickers_next_update_uid(&self, new_uid: i64) -> Result<()> {
+        diesel::sql_query(format!(
+            "select setval('asset_ext_tickers_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
+            new_uid
+        ))
+        .execute(self)
+        .map(|_| ())
+        .map_err(|err| {
+            let context = format!("Cannot set asset_ext_tickers next update uid: {}", err);
+            Error::new(AppError::DbDieselError(err)).context(context)
+        })
+    }
+
+    fn rollback_asset_ext_tickers(&self, block_uid: &i64) -> Result<Vec<DeletedAssetExtTicker>> {
+        diesel::delete(asset_ext_tickers::table)
+            .filter(asset_ext_tickers::block_uid.gt(block_uid))
+            .returning((asset_ext_tickers::uid, asset_ext_tickers::asset_id))
+            .get_results(self)
+            .map(|bs| {
+                bs.into_iter()
+                    .map(|(uid, asset_id)| DeletedAssetExtTicker { uid, asset_id })
+                    .collect()
+            })
+            .map_err(|err| {
+                let context = format!("Cannot rollback asset_ext_tickers: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn reopen_asset_ext_tickers_superseded_by(&self, current_superseded_by: &Vec<i64>) -> Result<()> {
+        diesel::sql_query("UPDATE asset_ext_tickers SET superseded_by = $1 FROM (SELECT UNNEST($2) AS superseded_by) AS current WHERE asset_ext_tickers.superseded_by = current.superseded_by;")
+            .bind::<BigInt, _>(MAX_UID)
+            .bind::<Array<BigInt>, _>(current_superseded_by)
+            .execute(self)
+            .map(|_| ())
+            .map_err(|err| {
+                let context = format!("Cannot reopen asset_ext_tickers superseded_by: {}", err);
+                Error::new(AppError::DbDieselError(err)).context(context)
+            })
+    }
+
+    fn update_asset_ext_tickers_block_references(&self, block_uid: &i64) -> Result<()> {
+        diesel::update(asset_ext_tickers::table)
+            .set((asset_ext_tickers::block_uid.eq(block_uid),))
+            .filter(asset_ext_tickers::block_uid.gt(block_uid))
+            .execute(self)
+            .map(|_| ())
+            .map_err(|err| {
+                let context = format!("Cannot update asset_ext_tickers block references: {}", err);
                 Error::new(AppError::DbDieselError(err)).context(context)
             })
     }
@@ -1224,12 +1347,13 @@ impl RepoOperations for PgConnection {
         //use same query from api
         use crate::services::assets::repo::pg::ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY;
 
-        let sql = format!(
-            "{} WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = ANY($2) ORDER BY a.id, a.uid DESC)",
-            ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY.as_str()
-        );
+        let placeholder = "/*---WHERE---*/";
+        let condition = "WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = ANY($2) ORDER BY a.id, a.uid DESC)";
+        let query_text = ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY
+            .as_str()
+            .replace(placeholder, condition);
 
-        sql_query(&sql)
+        sql_query(&query_text)
             .bind::<BigInt, _>(MAX_UID)
             .bind::<Array<Text>, _>(ids)
             .get_results(self)
