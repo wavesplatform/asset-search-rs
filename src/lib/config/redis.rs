@@ -6,7 +6,7 @@ fn default_port() -> u16 {
     6379
 }
 
-// redis username is empty by default (lagacy)
+// redis username is empty by default (legacy)
 // and authenticated using password only
 fn default_user() -> String {
     "".to_owned()
@@ -17,15 +17,15 @@ fn default_poolsize() -> u32 {
 }
 
 #[derive(Deserialize)]
-pub struct ConfigFlat {
-    pub host: String,
+struct ConfigFlat {
+    host: String,
     #[serde(default = "default_port")]
-    pub port: u16,
+    port: u16,
     #[serde(default = "default_user")]
-    pub user: String,
-    pub password: String,
+    user: String,
+    password: String,
     #[serde(default = "default_poolsize")]
-    pub poolsize: u32,
+    poolsize: u32,
 }
 
 #[derive(Debug, Clone)]

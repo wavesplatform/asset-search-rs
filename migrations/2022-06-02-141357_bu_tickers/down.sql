@@ -13,9 +13,9 @@ CREATE INDEX IF NOT EXISTS predefined_verifications_verification_status_asset_id
 DROP TABLE IF EXISTS asset_tickers;
 DROP FUNCTION IF EXISTS reopen_asset_tickers;
 
-CREATE OR REPLACE FUNCTION rollback_to(target_height INTEGER) RETURNS VOID 
-    language plpgsql 
-AS $$ 
+CREATE OR REPLACE FUNCTION rollback_to(target_height INTEGER) RETURNS VOID
+    language plpgsql
+AS $$
 BEGIN
     DELETE FROM blocks_microblocks WHERE height >= target_height;
 

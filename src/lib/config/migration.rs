@@ -6,20 +6,14 @@ fn default_port() -> u16 {
     5432
 }
 
-fn default_poolsize() -> u32 {
-    1
-}
-
 #[derive(Deserialize)]
-pub struct ConfigFlat {
-    pub host: String,
+struct ConfigFlat {
+    host: String,
     #[serde(default = "default_port")]
-    pub port: u16,
-    pub database: String,
-    pub user: String,
-    pub password: String,
-    #[serde(default = "default_poolsize")]
-    pub poolsize: u32,
+    port: u16,
+    database: String,
+    user: String,
+    password: String,
 }
 
 #[derive(Clone, Debug)]

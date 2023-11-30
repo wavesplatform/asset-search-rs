@@ -15,7 +15,7 @@ use crate::models::AssetInfo;
 use crate::waves::{WAVES_DESCR, WAVES_ID};
 
 use entities::UserDefinedData;
-use repo::{FindParams, LabelFilter, TickerFilter};
+use repo::{FindParams, StringFilter};
 
 #[derive(Clone, Debug, Default)]
 pub struct GetOptions {
@@ -71,7 +71,7 @@ pub trait Service {
 
 pub struct AssetsService {
     repo: Arc<dyn repo::Repo + Send + Sync>,
-    asset_blockhaind_data_cache: Box<dyn cache::AsyncReadCache<AssetBlockchainData> + Send + Sync>,
+    asset_blockchain_data_cache: Box<dyn cache::AsyncReadCache<AssetBlockchainData> + Send + Sync>,
     asset_user_defined_data_cache:
         Box<dyn cache::AsyncReadCache<AssetUserDefinedData> + Send + Sync>,
     asset_storage_address: String,
@@ -80,7 +80,7 @@ pub struct AssetsService {
 impl AssetsService {
     pub fn new(
         repo: Arc<dyn repo::Repo + Send + Sync>,
-        asset_blockhaind_data_cache: Box<
+        asset_blockchain_data_cache: Box<
             dyn cache::AsyncReadCache<AssetBlockchainData> + Send + Sync,
         >,
         asset_user_defined_data_cache: Box<
@@ -90,7 +90,7 @@ impl AssetsService {
     ) -> Self {
         Self {
             repo,
-            asset_blockhaind_data_cache,
+            asset_blockchain_data_cache,
             asset_user_defined_data_cache,
             asset_storage_address: asset_storage_address.to_owned(),
         }
@@ -110,7 +110,7 @@ impl Service for AssetsService {
         let cached_asset = if opts.bypass_cache {
             None
         } else {
-            self.asset_blockhaind_data_cache.get(id).await?
+            self.asset_blockchain_data_cache.get(id).await?
         };
 
         let asset_blockchain_data = if let Some(cached) = cached_asset {
@@ -247,7 +247,7 @@ impl Service for AssetsService {
                 let cached_assets = if opts.bypass_cache {
                     vec![None; ids.len()]
                 } else {
-                    self.asset_blockhaind_data_cache.mget(ids).await?
+                    self.asset_blockchain_data_cache.mget(ids).await?
                 };
 
                 let not_cached_asset_ids = cached_assets
@@ -401,16 +401,23 @@ impl Service for AssetsService {
             search: req.search.clone(),
             ticker: req.ticker.as_ref().map(|ticker| {
                 if ticker.as_str() == "*" {
-                    TickerFilter::Any
+                    StringFilter::Any
                 } else {
-                    TickerFilter::One(ticker.to_owned())
+                    StringFilter::One(ticker.to_owned())
+                }
+            }),
+            ext_ticker: req.ext_ticker.as_ref().map(|ext_ticker| {
+                if ext_ticker.as_str() == "*" {
+                    StringFilter::Any
+                } else {
+                    StringFilter::One(ext_ticker.to_owned())
                 }
             }),
             label: req.label.as_ref().map(|label| {
                 if label.as_str() == "*" {
-                    LabelFilter::Any
+                    StringFilter::Any
                 } else {
-                    LabelFilter::One(label.to_owned())
+                    StringFilter::One(label.to_owned())
                 }
             }),
             smart: req.smart,

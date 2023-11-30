@@ -8,10 +8,10 @@ fn default_invalidate_entire_cache() -> InvalidateCacheMode {
 }
 
 #[derive(Deserialize)]
-pub struct ConfigFlat {
-    pub asset_storage_address: String,
+struct ConfigFlat {
+    asset_storage_address: String,
     #[serde(default = "default_invalidate_entire_cache")]
-    pub invalidate_cache_mode: InvalidateCacheMode,
+    invalidate_cache_mode: InvalidateCacheMode,
 }
 
 #[derive(Debug, Clone)]

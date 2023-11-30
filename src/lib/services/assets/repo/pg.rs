@@ -5,22 +5,33 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use wavesexchange_log::error;
 
-use super::{Asset, AssetId, FindParams, OracleDataEntry, Repo, TickerFilter, UserDefinedData};
+use super::{Asset, AssetId, FindParams, OracleDataEntry, Repo, StringFilter, UserDefinedData};
 use crate::db::enums::DataEntryValueTypeMapping;
 use crate::db::PgPool;
 use crate::error::Error as AppError;
 use crate::schema::data_entries;
-use crate::services::assets::repo::LabelFilter;
 
 const MAX_UID: i64 = i64::MAX - 1;
 
 lazy_static! {
-    pub(crate) static ref ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY: String = format!("SELECT
+    /// This query has performance problems if the number of LEFT JOINs > 6.
+    /// Mitigated by moving core part of the query into WITH clause.
+    /// Might need further optimizations if more JOINs added later.
+    ///
+    /// The "/*---WHERE---*/" is a placeholder for string manipulations, do not remove!
+    pub(crate) static ref ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY: String = format!("
+        WITH assets_blocks_microblocks AS (
+                SELECT a.*, bm.height
+                FROM assets a
+                LEFT JOIN blocks_microblocks bm ON (SELECT min(block_uid) FROM assets WHERE id = a.id) = bm.uid
+                /*---WHERE---*/
+        )
+        SELECT
         a.id,
         coalesce(asn.asset_name, a.name) as name,
         coalesce(asd.asset_description, a.description) as description,
         a.precision,
-        bm.height,
+        a.height,
         (SELECT DATE_TRUNC('second', MIN(time_stamp)) FROM assets WHERE id = a.id) as timestamp,
         a.issuer,
         a.quantity,
@@ -29,13 +40,14 @@ lazy_static! {
         a.smart,
         a.nft,
         ast.ticker,
+        aste.ext_ticker,
         CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ib.regular_balance END AS sponsor_regular_balance,
         CASE WHEN a.min_sponsored_fee IS NULL THEN NULL ELSE ol.amount END          AS sponsor_out_leasing
-        FROM assets AS a
-        LEFT JOIN blocks_microblocks bm ON (SELECT min(block_uid) FROM assets WHERE id = a.id) = bm.uid
+        FROM assets_blocks_microblocks AS a
         LEFT JOIN issuer_balances ib ON ib.address = a.issuer AND ib.superseded_by = {MAX_UID}
         LEFT JOIN out_leasings ol ON ol.address = a.issuer AND ol.superseded_by = {MAX_UID}
         LEFT JOIN asset_tickers ast ON a.id = ast.asset_id AND ast.superseded_by = {MAX_UID}
+        LEFT JOIN asset_ext_tickers aste ON a.id = aste.asset_id AND aste.superseded_by = {MAX_UID}
         LEFT JOIN asset_names asn ON a.id = asn.asset_id AND asn.superseded_by = {MAX_UID}
         LEFT JOIN asset_descriptions asd ON a.id = asd.asset_id AND asd.superseded_by = {MAX_UID}
     ", MAX_UID = MAX_UID);
@@ -130,11 +142,11 @@ impl Repo for PgRepo {
             ];
 
             match params.label.as_ref() {
-                Some(LabelFilter::One(label)) => {
+                Some(StringFilter::One(label)) => {
                     let label = utils::pg_escape(label);
                     conditions.push(format!("'{}' = ANY(labels)", label));
                 }
-                Some(LabelFilter::Any) => {
+                Some(StringFilter::Any) => {
                     conditions.push(format!("array_length(labels,1) > 0"));
                 }
                 None => {}
@@ -176,25 +188,37 @@ impl Repo for PgRepo {
                 conditions
             )
         } else {
-            // search by ticker only if there is not searching by text
+            // search by ticker only if there is no searching by text
             if let Some(ticker) = params.ticker.as_ref() {
                 match ticker {
-                    TickerFilter::One(ticker) => {
+                    StringFilter::One(ticker) => {
                         conditions.push(format!("ast.ticker = '{}'", utils::pg_escape(ticker)));
                     }
-                    TickerFilter::Any => {
+                    StringFilter::Any => {
                         conditions.push(format!("ast.ticker IS NOT NULL AND ast.ticker != ''"));
                     }
                 }
             }
 
-            // search by label only if there is not searching by text
+            // search by external ticker only if there is no searching by text
+            if let Some(ext_ticker) = params.ext_ticker.as_ref() {
+                match ext_ticker {
+                    StringFilter::One(ext_ticker) => {
+                        conditions.push(format!("aste.ext_ticker = '{}'", utils::pg_escape(ext_ticker)));
+                    }
+                    StringFilter::Any => {
+                        conditions.push(format!("aste.ext_ticker IS NOT NULL AND aste.ext_ticker != ''"));
+                    }
+                }
+            }
+
+            // search by label only if there is no searching by text
             if let Some(filter_label) = params.label.as_ref() {
                 match filter_label {
-                    LabelFilter::One(label) => {
+                    StringFilter::One(label) => {
                         conditions.push(format!("'{}' = ANY(labels)", utils::pg_escape(&label)));
                     }
-                    LabelFilter::Any => {
+                    StringFilter::Any => {
                         conditions.push(format!("array_length(labels,1) > 0"));
                     }
                 }
@@ -213,6 +237,7 @@ impl Repo for PgRepo {
                 FROM
                     (SELECT a.id, a.smart, (SELECT min(a1.block_uid) FROM assets a1 WHERE a1.id = a.id) AS block_uid, a.issuer FROM assets AS a WHERE a.superseded_by = {} AND a.nft = false) AS a
                 LEFT JOIN asset_tickers AS ast ON ast.asset_id = a.id and ast.superseded_by = {}
+                LEFT JOIN asset_ext_tickers AS aste ON aste.asset_id = a.id and aste.superseded_by = {}
                 LEFT JOIN (
                     SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
                     FROM (
@@ -228,6 +253,7 @@ impl Repo for PgRepo {
                 ) AS awl ON awl.asset_id = a.id
                 {}
                 ORDER BY a.block_uid ASC",
+                MAX_UID,
                 MAX_UID,
                 MAX_UID,
                 MAX_UID,
@@ -261,12 +287,14 @@ impl Repo for PgRepo {
     }
 
     fn get(&self, id: &str) -> Result<Option<Asset>, AppError> {
-        let q = sql_query(&format!(
-            "{} WHERE a.uid = (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = $2 ORDER BY a.id, a.uid DESC LIMIT 1)",
-            ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY.as_str()
-        ))
-        .bind::<BigInt, _>(MAX_UID)
-        .bind::<Text, _>(id);
+        let placeholder = "/*---WHERE---*/";
+        let condition = "WHERE a.uid = (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = $2 ORDER BY a.id, a.uid DESC LIMIT 1)";
+        let query_text = ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY
+            .as_str()
+            .replace(placeholder, condition);
+        let q = sql_query(&query_text)
+            .bind::<BigInt, _>(MAX_UID)
+            .bind::<Text, _>(id);
 
         q.get_result(&mut self.pg_pool.get()?)
             .optional()
@@ -277,12 +305,14 @@ impl Repo for PgRepo {
     }
 
     fn mget(&self, ids: &[&str]) -> Result<Vec<Option<Asset>>, AppError> {
-        let q = sql_query(&format!(
-            "{} WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = ANY($2) ORDER BY a.id, a.uid DESC)",
-            ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY.as_str()
-        ))
-        .bind::<BigInt, _>(MAX_UID)
-        .bind::<Array<Text>, _>(ids);
+        let placeholder = "/*---WHERE---*/";
+        let condition = "WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.superseded_by = $1 AND a.id = ANY($2) ORDER BY a.id, a.uid DESC)";
+        let query_text = ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY
+            .as_str()
+            .replace(placeholder, condition);
+        let q = sql_query(&query_text)
+            .bind::<BigInt, _>(MAX_UID)
+            .bind::<Array<Text>, _>(ids);
 
         q.load(&mut self.pg_pool.get()?).map_err(|e| {
             error!("{:?}", e);
@@ -291,8 +321,12 @@ impl Repo for PgRepo {
     }
 
     fn mget_for_height(&self, ids: &[&str], height: i32) -> Result<Vec<Option<Asset>>, AppError> {
-        let q = sql_query(&format!("
-            {} WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.id = ANY($1) AND a.block_uid <= (SELECT uid FROM blocks_microblocks WHERE height = $2 LIMIT 1) ORDER BY a.id, a.uid DESC)", ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY.as_str()))
+        let placeholder = "/*---WHERE---*/";
+        let condition = "WHERE a.uid IN (SELECT DISTINCT ON (a.id) a.uid FROM assets a WHERE a.nft = false AND a.id = ANY($1) AND a.block_uid <= (SELECT uid FROM blocks_microblocks WHERE height = $2 LIMIT 1) ORDER BY a.id, a.uid DESC)";
+        let query_text = ASSETS_BLOCKCHAIN_DATA_BASE_SQL_QUERY
+            .as_str()
+            .replace(placeholder, condition);
+        let q = sql_query(&query_text)
             .bind::<Array<Text>, _>(ids)
             .bind::<Integer, _>(height);
 
@@ -379,9 +413,11 @@ pub(crate) fn generate_assets_user_defined_data_base_sql_query() -> String {
         "SELECT
         a.id as asset_id,
         ast.ticker,
+        aste.ext_ticker,
         COALESCE(awl.labels, ARRAY[]::text[])  AS labels
         FROM assets a
         LEFT JOIN asset_tickers ast ON a.id = ast.asset_id and ast.superseded_by = {}
+        LEFT JOIN asset_ext_tickers aste ON a.id = aste.asset_id and aste.superseded_by = {}
         LEFT JOIN (
             SELECT asset_id, ARRAY_AGG(DISTINCT labels_list) AS labels
             FROM (
@@ -396,7 +432,7 @@ pub(crate) fn generate_assets_user_defined_data_base_sql_query() -> String {
             GROUP BY asset_id
         ) AS awl ON awl.asset_id = a.id
     ",
-        MAX_UID, MAX_UID
+        MAX_UID, MAX_UID, MAX_UID
     )
 }
 
@@ -416,7 +452,7 @@ mod utils {
         p.replace_all(&query, "\\%").to_string()
     }
 
-    pub(super) fn pg_escape<'a>(text: &'a str) -> Cow<'a, str> {
+    pub(super) fn pg_escape(text: &str) -> Cow<str> {
         let bytes = text.as_bytes();
 
         let mut owned = None;

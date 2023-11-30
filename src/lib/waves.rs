@@ -128,7 +128,7 @@ pub const KNOWN_WAVES_ASSOCIATION_ASSET_ATTRIBUTES: &'static [&str] = &[
     "version",
 ];
 
-/// Parses data entry key written in Waves Assiciation format
+/// Parses data entry key written in Waves Association format
 /// respectively to the allowed attributes vector
 ///
 /// This format described as `{attribute}_<{asset_id}>`

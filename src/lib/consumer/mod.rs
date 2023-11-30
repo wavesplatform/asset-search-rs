@@ -27,6 +27,9 @@ use self::models::asset_descriptions::{
 use self::models::asset_labels::{AssetLabelsOverride, DeletedAssetLabels, InsertableAssetLabels};
 use self::models::asset_names::{AssetNameOverride, DeletedAssetName, InsertableAssetName};
 use self::models::asset_tickers::{AssetTickerOverride, DeletedAssetTicker, InsertableAssetTicker};
+use self::models::asset_tickers_ext::{
+    AssetExtTickerOverride, DeletedAssetExtTicker, InsertableAssetExtTicker,
+};
 use self::models::block_microblock::BlockMicroblock;
 use self::models::data_entry::{
     DataEntryOverride, DataEntryUpdate, DataEntryValue, DeletedDataEntry, InsertableDataEntry,
@@ -101,6 +104,12 @@ pub struct AssetLabelsUpdate {
 pub struct AssetTickerUpdate {
     pub asset_id: String,
     pub ticker: String,
+}
+
+#[derive(Debug)]
+pub struct AssetExtTickerUpdate {
+    pub asset_id: String,
+    pub ext_ticker: String,
 }
 
 #[derive(Debug)]
@@ -214,7 +223,7 @@ where
                 Ok(handle_updates(
                     updates_with_height,
                     o,
-                    chain_id.clone(),
+                    chain_id,
                     wwa,
                 )?)
             })
@@ -463,6 +472,38 @@ where
     info!(
         "handled {} asset tickers updates",
         asset_tickers_updates_with_block_uids.len()
+    );
+
+    // Handle asset external tickers updates
+    timer!("asset external tickers updates handling");
+
+    let asset_ext_tickers_updates_with_block_uids: Vec<(&i64, AssetExtTickerUpdate)> =
+        block_uids_with_appends
+            .iter()
+            .flat_map(|(block_uid, append)| {
+                append
+                    .txs
+                    .iter()
+                    .flat_map(|tx| {
+                        extract_asset_ext_tickers_updates(
+                            append.height as i32,
+                            tx,
+                            asset_storage_address.clone(),
+                        )
+                    })
+                    .map(|u| {
+                        changed_asset_ids.push(u.asset_id.clone());
+                        (block_uid, u)
+                    })
+                    .collect_vec()
+            })
+            .collect();
+
+    handle_asset_ext_tickers_updates(repo, &asset_ext_tickers_updates_with_block_uids)?;
+
+    info!(
+        "handled {} asset external tickers updates",
+        asset_ext_tickers_updates_with_block_uids.len()
     );
 
     // Handle asset names updates
@@ -1171,6 +1212,50 @@ fn extract_asset_tickers_updates(
         .collect_vec()
 }
 
+fn extract_asset_ext_tickers_updates(
+    _height: i32,
+    tx: &Tx,
+    asset_storage_address: String,
+) -> Vec<AssetExtTickerUpdate> {
+    tx.state_update
+        .data_entries
+        .iter()
+        .filter_map(|data_entry_update| {
+            data_entry_update.data_entry.as_ref().and_then(|de| {
+                let oracle_address = bs58::encode(&data_entry_update.address).into_string();
+                if asset_storage_address == oracle_address
+                    && is_asset_external_ticker_data_entry(&de.key)
+                {
+                    match de.value.as_ref() {
+                        Some(value) => match value {
+                            Value::StringValue(value)
+                                if asset_storage_address == oracle_address =>
+                            {
+                                frag_parse!("%s%s", de.key).map(|(_, asset_id)| {
+                                    AssetExtTickerUpdate {
+                                        asset_id,
+                                        ext_ticker: value.clone(),
+                                    }
+                                })
+                            }
+                            _ => None,
+                        },
+                        // key was deleted -> drop asset ticker
+                        None => {
+                            frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetExtTickerUpdate {
+                                asset_id,
+                                ext_ticker: "".into(),
+                            })
+                        }
+                    }
+                } else {
+                    None
+                }
+            })
+        })
+        .collect_vec()
+}
+
 // https://confluence.wavesplatform.com/display/DEXPRODUCTS/WX+Governance#WXGovernance-%D0%9B%D0%B5%D0%B9%D0%B1%D0%BB%D1%8B%D0%B0%D1%81%D1%81%D0%B5%D1%82%D0%B0
 fn extract_asset_labels_updates(
     _height: i32,
@@ -1388,6 +1473,99 @@ fn handle_asset_tickers_updates<R: RepoOperations>(
     repo.insert_asset_tickers(asset_tickers_with_uids_superseded_by)?;
 
     repo.set_asset_tickers_next_update_uid(asset_tickers_next_uid + updates_count as i64)
+}
+
+fn handle_asset_ext_tickers_updates<R: RepoOperations>(
+    repo: &R,
+    updates: &[(&i64, AssetExtTickerUpdate)],
+) -> Result<()> {
+    if updates.is_empty() {
+        return Ok(());
+    }
+
+    let updates_count = updates.len();
+
+    let asset_ext_tickers_next_uid = repo.get_next_asset_ext_tickers_uid()?;
+
+    let asset_ext_tickers_updates = updates
+        .iter()
+        .enumerate()
+        .map(
+            |(update_idx, (block_uid, ext_tickers_update))| InsertableAssetExtTicker {
+                uid: asset_ext_tickers_next_uid + update_idx as i64,
+                superseded_by: -1,
+                block_uid: **block_uid,
+                asset_id: ext_tickers_update.asset_id.clone(),
+                ext_ticker: ext_tickers_update.ext_ticker.clone(),
+            },
+        )
+        .collect_vec();
+
+    let mut asset_ext_tickers_grouped: HashMap<
+        InsertableAssetExtTicker,
+        Vec<InsertableAssetExtTicker>,
+    > = HashMap::new();
+
+    asset_ext_tickers_updates.into_iter().for_each(|update| {
+        let group = asset_ext_tickers_grouped
+            .entry(update.clone())
+            .or_insert(vec![]);
+        group.push(update);
+    });
+
+    let asset_ext_tickers_grouped = asset_ext_tickers_grouped.into_iter().collect_vec();
+
+    let asset_ext_tickers_grouped_with_uids_superseded_by = asset_ext_tickers_grouped
+        .into_iter()
+        .map(|(group_key, group)| {
+            let mut updates = group
+                .into_iter()
+                .sorted_by_key(|item| item.uid)
+                .collect::<Vec<InsertableAssetExtTicker>>();
+
+            let mut last_uid = i64::MAX - 1;
+            (
+                group_key,
+                updates
+                    .as_mut_slice()
+                    .iter_mut()
+                    .rev()
+                    .map(|cur| {
+                        cur.superseded_by = last_uid;
+                        last_uid = cur.uid;
+                        cur.to_owned()
+                    })
+                    .sorted_by_key(|item| item.uid)
+                    .collect(),
+            )
+        })
+        .collect::<Vec<(InsertableAssetExtTicker, Vec<InsertableAssetExtTicker>)>>();
+
+    let asset_ext_tickers_first_uids: Vec<AssetExtTickerOverride> =
+        asset_ext_tickers_grouped_with_uids_superseded_by
+            .iter()
+            .map(|(_, group)| {
+                let first = group.iter().next().unwrap().clone();
+                AssetExtTickerOverride {
+                    superseded_by: first.uid,
+                    asset_id: first.asset_id,
+                }
+            })
+            .collect();
+
+    repo.close_asset_ext_tickers_superseded_by(&asset_ext_tickers_first_uids)?;
+
+    let asset_ext_tickers_with_uids_superseded_by =
+        &asset_ext_tickers_grouped_with_uids_superseded_by
+            .clone()
+            .into_iter()
+            .flat_map(|(_, v)| v)
+            .sorted_by_key(|asset_ext_tickers| asset_ext_tickers.uid)
+            .collect_vec();
+
+    repo.insert_asset_ext_tickers(asset_ext_tickers_with_uids_superseded_by)?;
+
+    repo.set_asset_ext_tickers_next_update_uid(asset_ext_tickers_next_uid + updates_count as i64)
 }
 
 fn handle_asset_names_updates<R: RepoOperations>(
@@ -1894,6 +2072,8 @@ fn squash_microblocks<R: RepoOperations>(storage: &mut R) -> Result<()> {
 
             storage.update_asset_tickers_block_references(&key_block_uid)?;
 
+            storage.update_asset_ext_tickers_block_references(&key_block_uid)?;
+
             storage.update_data_entries_block_references(&key_block_uid)?;
 
             storage.update_issuer_balances_block_references(&key_block_uid)?;
@@ -1928,6 +2108,8 @@ where
     rollback_asset_labels(repo, block_uid)?;
 
     rollback_asset_tickers(repo, block_uid)?;
+
+    rollback_asset_ext_tickers(repo, block_uid)?;
 
     rollback_data_entries(repo, block_uid)?;
 
@@ -2006,7 +2188,26 @@ fn rollback_asset_tickers<R: RepoOperations>(repo: &mut R, block_uid: i64) -> Re
     repo.reopen_asset_tickers_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_data_entries<R: RepoOperations>(repo: &mut R, block_uid: i64) -> Result<()> {
+fn rollback_asset_ext_tickers<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+    let deleted = repo.rollback_asset_ext_tickers(&block_uid)?;
+
+    let mut grouped_deleted: HashMap<DeletedAssetExtTicker, Vec<DeletedAssetExtTicker>> =
+        HashMap::new();
+
+    deleted.into_iter().for_each(|item| {
+        let group = grouped_deleted.entry(item.clone()).or_insert(vec![]);
+        group.push(item);
+    });
+
+    let lowest_deleted_uids: Vec<i64> = grouped_deleted
+        .into_iter()
+        .filter_map(|(_, group)| group.into_iter().min_by_key(|i| i.uid).map(|i| i.uid))
+        .collect();
+
+    repo.reopen_asset_ext_tickers_superseded_by(&lowest_deleted_uids)
+}
+
+fn rollback_data_entries<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_data_entries(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedDataEntry, Vec<DeletedDataEntry>> = HashMap::new();
@@ -2157,6 +2358,10 @@ fn is_asset_labels_data_entry(key: &str) -> bool {
 
 fn is_asset_ticker_data_entry(key: &str) -> bool {
     key.starts_with("%s%s__assetId2ticker__")
+}
+
+fn is_asset_external_ticker_data_entry(key: &str) -> bool {
+    key.starts_with("%s%s__assetId2external__")
 }
 
 fn is_asset_name_data_entry(key: &str) -> bool {

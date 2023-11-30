@@ -11,6 +11,8 @@ pub struct SearchRequest {
     #[validate(custom = "validate_sql_valid")]
     pub ticker: Option<String>,
     #[validate(custom = "validate_sql_valid")]
+    pub ext_ticker: Option<String>,
+    #[validate(custom = "validate_sql_valid")]
     pub label: Option<String>,
     pub search: Option<String>,
     #[serde(default, deserialize_with = "deserialize_optional_bool_from_string")]
@@ -31,6 +33,7 @@ impl From<SearchRequest> for crate::services::assets::SearchRequest {
         Self {
             ids: sr.ids,
             ticker: sr.ticker,
+            ext_ticker: sr.ext_ticker,
             label: sr.label,
             search: sr.search,
             smart: sr.smart,
