@@ -671,7 +671,7 @@ impl RepoOperations for PgConnection {
     // ASSET EXTERNAL TICKERS
     //
 
-    fn mget_asset_ext_tickers(&self, asset_ids: &[&str]) -> Result<Vec<AssetExtTicker>> {
+    fn mget_asset_ext_tickers(&mut self, asset_ids: &[&str]) -> Result<Vec<AssetExtTicker>> {
         let q = asset_ext_tickers::table
             .select((asset_ext_tickers::asset_id, asset_ext_tickers::ext_ticker))
             .filter(asset_ext_tickers::superseded_by.eq(MAX_UID))
@@ -683,7 +683,7 @@ impl RepoOperations for PgConnection {
         })
     }
 
-    fn get_next_asset_ext_tickers_uid(&self) -> Result<i64> {
+    fn get_next_asset_ext_tickers_uid(&mut self) -> Result<i64> {
         asset_ext_tickers_uid_seq::table
             .select(asset_ext_tickers_uid_seq::last_value)
             .first(self)
@@ -693,7 +693,7 @@ impl RepoOperations for PgConnection {
             })
     }
 
-    fn close_asset_ext_tickers_superseded_by(&self, updates: &Vec<AssetExtTickerOverride>) -> Result<()> {
+    fn close_asset_ext_tickers_superseded_by(&mut self, updates: &Vec<AssetExtTickerOverride>) -> Result<()> {
         let mut asset_ids = vec![];
         let mut superseded_by_uids = vec![];
 
@@ -713,7 +713,7 @@ impl RepoOperations for PgConnection {
         })
     }
 
-    fn insert_asset_ext_tickers(&self, updates: &Vec<InsertableAssetExtTicker>) -> Result<()> {
+    fn insert_asset_ext_tickers(&mut self, updates: &Vec<InsertableAssetExtTicker>) -> Result<()> {
         let columns_count = asset_ext_tickers::table::all_columns().len();
         let chunk_size = (PG_MAX_INSERT_FIELDS_COUNT / columns_count) / 10 * 10;
         updates
@@ -732,7 +732,7 @@ impl RepoOperations for PgConnection {
             })
     }
 
-    fn set_asset_ext_tickers_next_update_uid(&self, new_uid: i64) -> Result<()> {
+    fn set_asset_ext_tickers_next_update_uid(&mut self, new_uid: i64) -> Result<()> {
         diesel::sql_query(format!(
             "select setval('asset_ext_tickers_uid_seq', {}, false);", // 3rd param - is called; in case of true, value'll be incremented before returning
             new_uid
@@ -745,7 +745,7 @@ impl RepoOperations for PgConnection {
         })
     }
 
-    fn rollback_asset_ext_tickers(&self, block_uid: &i64) -> Result<Vec<DeletedAssetExtTicker>> {
+    fn rollback_asset_ext_tickers(&mut self, block_uid: &i64) -> Result<Vec<DeletedAssetExtTicker>> {
         diesel::delete(asset_ext_tickers::table)
             .filter(asset_ext_tickers::block_uid.gt(block_uid))
             .returning((asset_ext_tickers::uid, asset_ext_tickers::asset_id))
@@ -761,7 +761,7 @@ impl RepoOperations for PgConnection {
             })
     }
 
-    fn reopen_asset_ext_tickers_superseded_by(&self, current_superseded_by: &Vec<i64>) -> Result<()> {
+    fn reopen_asset_ext_tickers_superseded_by(&mut self, current_superseded_by: &Vec<i64>) -> Result<()> {
         diesel::sql_query("UPDATE asset_ext_tickers SET superseded_by = $1 FROM (SELECT UNNEST($2) AS superseded_by) AS current WHERE asset_ext_tickers.superseded_by = current.superseded_by;")
             .bind::<BigInt, _>(MAX_UID)
             .bind::<Array<BigInt>, _>(current_superseded_by)
@@ -773,7 +773,7 @@ impl RepoOperations for PgConnection {
             })
     }
 
-    fn update_asset_ext_tickers_block_references(&self, block_uid: &i64) -> Result<()> {
+    fn update_asset_ext_tickers_block_references(&mut self, block_uid: &i64) -> Result<()> {
         diesel::update(asset_ext_tickers::table)
             .set((asset_ext_tickers::block_uid.eq(block_uid),))
             .filter(asset_ext_tickers::block_uid.gt(block_uid))

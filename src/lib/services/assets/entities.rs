@@ -44,7 +44,7 @@ pub struct Asset {
     pub sponsor_out_leasing: Option<i64>,
     #[diesel(sql_type = Nullable<Text>)]
     pub ticker: Option<String>,
-    #[sql_type = "Nullable<Text>"]
+    #[diesel(sql_type = Nullable<Text>)]
     pub ext_ticker: Option<String>,
 }
 
@@ -225,9 +225,9 @@ pub struct UserDefinedData {
     pub asset_id: String,
     #[diesel(sql_type = Nullable<Text>)]
     pub ticker: Option<String>,
-    #[sql_type = "Nullable<Text>"]
+    #[diesel(sql_type = Nullable<Text>)]
     pub ext_ticker: Option<String>,
-    #[sql_type = "Array<Text>"]
+    #[diesel(sql_type = Array<Text>)]
     pub labels: Vec<String>,
 }
 

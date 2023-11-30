@@ -1476,7 +1476,7 @@ fn handle_asset_tickers_updates<R: RepoOperations>(
 }
 
 fn handle_asset_ext_tickers_updates<R: RepoOperations>(
-    repo: &R,
+    repo: &mut R,
     updates: &[(&i64, AssetExtTickerUpdate)],
 ) -> Result<()> {
     if updates.is_empty() {
@@ -2188,7 +2188,7 @@ fn rollback_asset_tickers<R: RepoOperations>(repo: &mut R, block_uid: i64) -> Re
     repo.reopen_asset_tickers_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_asset_ext_tickers<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_asset_ext_tickers<R: RepoOperations>(repo: &mut R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_asset_ext_tickers(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedAssetExtTicker, Vec<DeletedAssetExtTicker>> =
@@ -2207,7 +2207,7 @@ fn rollback_asset_ext_tickers<R: RepoOperations>(repo: &R, block_uid: i64) -> Re
     repo.reopen_asset_ext_tickers_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_data_entries<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_data_entries<R: RepoOperations>(repo: &mut R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_data_entries(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedDataEntry, Vec<DeletedDataEntry>> = HashMap::new();

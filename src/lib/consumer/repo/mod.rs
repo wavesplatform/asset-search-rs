@@ -150,21 +150,21 @@ pub trait RepoOperations {
     // ASSET EXTERNAL TICKERS
     //
 
-    fn mget_asset_ext_tickers(&self, asset_ids: &[&str]) -> Result<Vec<AssetExtTicker>>;
+    fn mget_asset_ext_tickers(&mut self, asset_ids: &[&str]) -> Result<Vec<AssetExtTicker>>;
 
-    fn get_next_asset_ext_tickers_uid(&self) -> Result<i64>;
+    fn get_next_asset_ext_tickers_uid(&mut self) -> Result<i64>;
 
-    fn insert_asset_ext_tickers(&self, updates: &Vec<InsertableAssetExtTicker>) -> Result<()>;
+    fn insert_asset_ext_tickers(&mut self, updates: &Vec<InsertableAssetExtTicker>) -> Result<()>;
 
-    fn update_asset_ext_tickers_block_references(&self, block_uid: &i64) -> Result<()>;
+    fn update_asset_ext_tickers_block_references(&mut self, block_uid: &i64) -> Result<()>;
 
-    fn close_asset_ext_tickers_superseded_by(&self, updates: &Vec<AssetExtTickerOverride>) -> Result<()>;
+    fn close_asset_ext_tickers_superseded_by(&mut self, updates: &Vec<AssetExtTickerOverride>) -> Result<()>;
 
-    fn reopen_asset_ext_tickers_superseded_by(&self, current_superseded_by: &Vec<i64>) -> Result<()>;
+    fn reopen_asset_ext_tickers_superseded_by(&mut self, current_superseded_by: &Vec<i64>) -> Result<()>;
 
-    fn set_asset_ext_tickers_next_update_uid(&self, new_uid: i64) -> Result<()>;
+    fn set_asset_ext_tickers_next_update_uid(&mut self, new_uid: i64) -> Result<()>;
 
-    fn rollback_asset_ext_tickers(&self, block_uid: &i64) -> Result<Vec<DeletedAssetExtTicker>>;
+    fn rollback_asset_ext_tickers(&mut self, block_uid: &i64) -> Result<Vec<DeletedAssetExtTicker>>;
 
     //
     // DATA ENTRIES
