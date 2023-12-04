@@ -30,6 +30,19 @@ pub struct Config {
     pub postgres: PostgresConfig,
 }
 
+impl Config {
+    pub fn database_url(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/{}",
+            self.postgres.user,
+            self.postgres.password,
+            self.postgres.host,
+            self.postgres.port,
+            self.postgres.database
+        )
+    }
+}
+
 pub fn load() -> Result<Config, Error> {
     let config_flat = envy::prefixed("PG").from_env::<ConfigFlat>()?;
 
