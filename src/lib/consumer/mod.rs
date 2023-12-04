@@ -144,7 +144,7 @@ pub trait UpdatesSource {
 pub async fn start<T, R, CBD, CUDD>(
     starting_height: u32,
     updates_src: T,
-    repo: &R,
+    repo: &mut R,
     blockchain_data_cache: &CBD,
     user_defined_data_cache: &CUDD,
     updates_per_request: usize,
@@ -249,7 +249,7 @@ where
 
 fn handle_updates<'a, R>(
     updates_with_height: BlockchainUpdatesWithLastHeight,
-    repo: &R,
+    repo: &mut R,
     chain_id: u8,
     asset_storage_address: String,
 ) -> Result<Vec<String>>
@@ -323,7 +323,7 @@ where
 }
 
 fn handle_appends<'a, R>(
-    repo: &R,
+    repo: &mut R,
     chain_id: u8,
     appends: &Vec<BlockMicroblockAppend>,
     asset_storage_address: String,
@@ -651,7 +651,7 @@ where
 }
 
 async fn update_redis_cache_from_db<'a, R, CBD, CUDD>(
-    repo: &R,
+    repo: &mut R,
     asset_ids: Vec<String>,
     blockchain_data_cache: &CBD,
     user_defined_data_cache: &CUDD,
@@ -813,7 +813,7 @@ fn extract_base_asset_info_updates(
 }
 
 fn handle_base_asset_info_updates<R: RepoOperations>(
-    repo: &R,
+    repo: &mut R,
     updates: &[(&i64, BaseAssetInfoUpdate)],
 ) -> Result<()> {
     if updates.is_empty() {
@@ -965,7 +965,7 @@ fn extract_asset_related_data_entries_updates(
 }
 
 fn handle_asset_related_data_entries_updates<R: RepoOperations>(
-    repo: &R,
+    repo: &mut R,
     updates: &[(&i64, DataEntryUpdate)],
 ) -> Result<()> {
     if updates.is_empty() {
@@ -1298,7 +1298,7 @@ fn extract_asset_labels_updates(
 }
 
 fn handle_asset_labels_updates<R: RepoOperations>(
-    repo: &R,
+    repo: &mut R,
     updates: &[(&i64, AssetLabelsUpdate)],
 ) -> Result<()> {
     if updates.is_empty() {
@@ -1386,7 +1386,7 @@ fn handle_asset_labels_updates<R: RepoOperations>(
 }
 
 fn handle_asset_tickers_updates<R: RepoOperations>(
-    repo: &R,
+    repo: &mut R,
     updates: &[(&i64, AssetTickerUpdate)],
 ) -> Result<()> {
     if updates.is_empty() {
@@ -1476,7 +1476,7 @@ fn handle_asset_tickers_updates<R: RepoOperations>(
 }
 
 fn handle_asset_ext_tickers_updates<R: RepoOperations>(
-    repo: &R,
+    repo: &mut R,
     updates: &[(&i64, AssetExtTickerUpdate)],
 ) -> Result<()> {
     if updates.is_empty() {
@@ -1569,7 +1569,7 @@ fn handle_asset_ext_tickers_updates<R: RepoOperations>(
 }
 
 fn handle_asset_names_updates<R: RepoOperations>(
-    repo: &R,
+    repo: &mut R,
     updates: &[(&i64, AssetNameUpdate)],
 ) -> Result<()> {
     if updates.is_empty() {
@@ -1657,7 +1657,7 @@ fn handle_asset_names_updates<R: RepoOperations>(
 }
 
 fn handle_asset_descriptions_updates<R: RepoOperations>(
-    repo: &R,
+    repo: &mut R,
     updates: &[(&i64, AssetDescriptionUpdate)],
 ) -> Result<()> {
     if updates.is_empty() {
@@ -1824,7 +1824,7 @@ fn extract_issuers_balance_updates(
 }
 
 fn handle_issuer_balances_updates<R: RepoOperations>(
-    repo: &R,
+    repo: &mut R,
     updates: &[(&i64, IssuerBalanceUpdate)],
 ) -> Result<()> {
     if updates.is_empty() {
@@ -1974,7 +1974,7 @@ fn extract_out_leasing_updates(append: &BlockMicroblockAppend) -> Vec<OutLeasing
 }
 
 fn handle_out_leasing_updates<R: RepoOperations>(
-    repo: &R,
+    repo: &mut R,
     updates: &[(&i64, OutLeasingUpdate)],
 ) -> Result<()> {
     if updates.is_empty() {
@@ -2059,7 +2059,7 @@ fn handle_out_leasing_updates<R: RepoOperations>(
     repo.set_out_leasings_next_update_uid(out_leasings_next_uid + updates_count as i64)
 }
 
-fn squash_microblocks<R: RepoOperations>(storage: &R) -> Result<()> {
+fn squash_microblocks<R: RepoOperations>(storage: &mut R) -> Result<()> {
     let total_block_id = storage.get_total_block_id()?;
 
     match total_block_id {
@@ -2094,7 +2094,7 @@ fn squash_microblocks<R: RepoOperations>(storage: &R) -> Result<()> {
     Ok(())
 }
 
-fn rollback<R>(repo: &R, block_uid: i64) -> Result<Vec<String>>
+fn rollback<R>(repo: &mut R, block_uid: i64) -> Result<Vec<String>>
 where
     R: RepoOperations,
 {
@@ -2134,7 +2134,7 @@ where
     Ok(assets_ids)
 }
 
-fn rollback_assets<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_assets<R: RepoOperations>(repo: &mut R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_assets(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedAsset, Vec<DeletedAsset>> = HashMap::new();
@@ -2152,7 +2152,7 @@ fn rollback_assets<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
     repo.reopen_assets_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_asset_labels<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_asset_labels<R: RepoOperations>(repo: &mut R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_asset_labels(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedAssetLabels, Vec<DeletedAssetLabels>> = HashMap::new();
@@ -2170,7 +2170,7 @@ fn rollback_asset_labels<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<
     repo.reopen_asset_labels_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_asset_tickers<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_asset_tickers<R: RepoOperations>(repo: &mut R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_asset_tickers(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedAssetTicker, Vec<DeletedAssetTicker>> = HashMap::new();
@@ -2188,7 +2188,7 @@ fn rollback_asset_tickers<R: RepoOperations>(repo: &R, block_uid: i64) -> Result
     repo.reopen_asset_tickers_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_asset_ext_tickers<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_asset_ext_tickers<R: RepoOperations>(repo: &mut R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_asset_ext_tickers(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedAssetExtTicker, Vec<DeletedAssetExtTicker>> =
@@ -2207,7 +2207,7 @@ fn rollback_asset_ext_tickers<R: RepoOperations>(repo: &R, block_uid: i64) -> Re
     repo.reopen_asset_ext_tickers_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_data_entries<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_data_entries<R: RepoOperations>(repo: &mut R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_data_entries(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedDataEntry, Vec<DeletedDataEntry>> = HashMap::new();
@@ -2225,7 +2225,7 @@ fn rollback_data_entries<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<
     repo.reopen_data_entries_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_issuer_balances<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_issuer_balances<R: RepoOperations>(repo: &mut R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_issuer_balances(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedIssuerBalance, Vec<DeletedIssuerBalance>> =
@@ -2244,7 +2244,7 @@ fn rollback_issuer_balances<R: RepoOperations>(repo: &R, block_uid: i64) -> Resu
     repo.reopen_issuer_balances_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_out_leasings<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_out_leasings<R: RepoOperations>(repo: &mut R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_out_leasings(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedOutLeasing, Vec<DeletedOutLeasing>> = HashMap::new();
@@ -2262,7 +2262,7 @@ fn rollback_out_leasings<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<
     repo.reopen_out_leasings_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_asset_names<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_asset_names<R: RepoOperations>(repo: &mut R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_asset_names(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedAssetName, Vec<DeletedAssetName>> = HashMap::new();
@@ -2280,7 +2280,7 @@ fn rollback_asset_names<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<(
     repo.reopen_asset_names_superseded_by(&lowest_deleted_uids)
 }
 
-fn rollback_asset_descriptions<R: RepoOperations>(repo: &R, block_uid: i64) -> Result<()> {
+fn rollback_asset_descriptions<R: RepoOperations>(repo: &mut R, block_uid: i64) -> Result<()> {
     let deleted = repo.rollback_asset_descriptions(&block_uid)?;
 
     let mut grouped_deleted: HashMap<DeletedAssetDescription, Vec<DeletedAssetDescription>> =

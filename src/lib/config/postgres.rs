@@ -32,6 +32,15 @@ pub struct Config {
     pub pool_size: u32,
 }
 
+impl Config {
+    pub fn database_url(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/{}",
+            self.user, self.password, self.host, self.port, self.database
+        )
+    }
+}
+
 pub fn load() -> Result<Config, Error> {
     let config_flat = envy::prefixed("POSTGRES__").from_env::<ConfigFlat>()?;
 

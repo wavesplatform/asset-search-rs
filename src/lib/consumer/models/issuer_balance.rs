@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use crate::schema::issuer_balances;
 
 #[derive(Clone, Debug, Insertable)]
-#[table_name = "issuer_balances"]
+#[diesel(table_name = issuer_balances)]
 pub struct InsertableIssuerBalance {
     pub uid: i64,
     pub superseded_by: i64,

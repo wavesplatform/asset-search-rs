@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use crate::schema::out_leasings;
 
 #[derive(Clone, Debug, Insertable)]
-#[table_name = "out_leasings"]
+#[diesel(table_name = out_leasings)]
 pub struct InsertableOutLeasing {
     pub uid: i64,
     pub superseded_by: i64,

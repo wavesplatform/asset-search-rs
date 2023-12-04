@@ -9,7 +9,7 @@ pub struct AssetLabels {
 }
 
 #[derive(Clone, Debug, Insertable)]
-#[table_name = "asset_labels"]
+#[diesel(table_name = asset_labels)]
 pub struct InsertableAssetLabels {
     pub uid: i64,
     pub superseded_by: i64,

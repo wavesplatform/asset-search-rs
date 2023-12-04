@@ -8,7 +8,7 @@ pub use super::entities::{Asset, OracleDataEntry, UserDefinedData};
 
 #[derive(Clone, Debug, QueryableByName)]
 pub struct AssetId {
-    #[sql_type = "Text"]
+    #[diesel(sql_type = Text)]
     pub id: String,
 }
 

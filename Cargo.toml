@@ -14,9 +14,9 @@ blake2 = "0.10"
 bs58 = "0.5"
 bytes = "1.1"
 chrono = { version = "0.4", features = ["serde"] }
-diesel = { version = "1.4", default-features = false, features = ["chrono", "postgres", "r2d2"] }
-diesel-derive-enum = { version = "1.1", features = ["postgres"] }
-diesel_migrations = "1.4"
+diesel = { version = "2.0", default-features = false, features = ["chrono", "postgres", "r2d2"] }
+diesel-derive-enum = { version = "2.1", features = ["postgres"] }
+diesel_migrations = "2.0"
 envy = "0.4"
 fragstrings = { git = "https://github.com/waves-exchange/fragstrings", tag = "v0.2.0", default-features = false, features = ["parse"] }
 futures = "0.3"
@@ -39,6 +39,7 @@ warp = { version = "0.3", default-features = false }
 waves-protobuf-schemas = { git = "https://github.com/wavesplatform/protobuf-schemas", tag = "rust_v1.4.3-1" }
 wavesexchange_log = { git = "https://github.com/waves-exchange/wavesexchange-rs", tag = "wavesexchange_log/0.5.1" }
 wavesexchange_warp = { git = "https://github.com/waves-exchange/wavesexchange-rs", tag = "wavesexchange_warp/0.14.9" }
+wavesexchange_liveness = { git = "https://github.com/waves-exchange/wavesexchange-rs", tag = "wavesexchange_liveness/0.2.0"}
 
 [lib]
 name = "app_lib"
