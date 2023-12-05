@@ -7,7 +7,7 @@ use crate::db::enums::DataEntryValueType;
 use crate::schema::data_entries;
 
 #[derive(Clone, Debug, Insertable)]
-#[table_name = "data_entries"]
+#[diesel(table_name = data_entries)]
 pub struct InsertableDataEntry {
     pub uid: i64,
     pub superseded_by: i64,

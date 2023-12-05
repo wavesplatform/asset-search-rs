@@ -9,7 +9,7 @@ pub struct AssetExtTicker {
 }
 
 #[derive(Clone, Debug, Insertable)]
-#[table_name = "asset_ext_tickers"]
+#[diesel(table_name = asset_ext_tickers)]
 pub struct InsertableAssetExtTicker {
     pub uid: i64,
     pub superseded_by: i64,

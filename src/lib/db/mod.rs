@@ -11,27 +11,8 @@ use crate::error::Error as AppError;
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 
-fn generate_postgres_url(
-    user: &str,
-    password: &str,
-    host: &str,
-    port: &u16,
-    database: &str,
-) -> String {
-    format!(
-        "postgres://{}:{}@{}:{}/{}",
-        user, password, host, port, database
-    )
-}
-
 pub fn pool(config: &Config) -> Result<PgPool, AppError> {
-    let db_url = generate_postgres_url(
-        &config.user,
-        &config.password,
-        &config.host,
-        &config.port,
-        &config.database,
-    );
+    let db_url = config.database_url();
 
     let manager = ConnectionManager::<PgConnection>::new(db_url);
     Ok(Pool::builder()
@@ -43,13 +24,7 @@ pub fn pool(config: &Config) -> Result<PgPool, AppError> {
 }
 
 pub fn unpooled(config: &Config) -> Result<PgConnection> {
-    let db_url = generate_postgres_url(
-        &config.user,
-        &config.password,
-        &config.host,
-        &config.port,
-        &config.database,
-    );
+    let db_url = config.database_url();
 
     PgConnection::establish(&db_url).map_err(|err| Error::new(AppError::ConnectionError(err)))
 }

@@ -5,9 +5,14 @@ use app_lib::{
     },
     config, consumer, db, sync_redis,
 };
+use std::time::Duration;
 use tokio::select;
+use wavesexchange_liveness::channel;
 use wavesexchange_log::{error, info};
 use wavesexchange_warp::MetricsWarpBuilder;
+
+const POLL_INTERVAL_SECS: u64 = 60;
+const MAX_BLOCK_AGE: Duration = Duration::from_secs(300);
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -22,7 +27,7 @@ async fn main() -> Result<()> {
 
     let updates_src = consumer::updates::new(&config.consumer.blockchain_updates_url).await?;
 
-    let pg_repo = consumer::repo::pg::new(conn);
+    let mut pg_repo = consumer::repo::pg::new(conn);
 
     let redis_pool = sync_redis::pool(&config.redis)?;
 
@@ -40,7 +45,7 @@ async fn main() -> Result<()> {
     let consumer = consumer::start(
         config.consumer.starting_height,
         updates_src,
-        &pg_repo,
+        &mut pg_repo,
         &blockchain_data_cache,
         &user_defined_data_cache,
         config.consumer.updates_per_request,
@@ -49,10 +54,16 @@ async fn main() -> Result<()> {
         config.consumer.asset_storage_address,
         config.consumer.start_rollback_depth,
     );
+    let db_url = config.postgres.database_url();
+    let readiness_channel = channel(db_url, POLL_INTERVAL_SECS, MAX_BLOCK_AGE);
 
-    let metrics = MetricsWarpBuilder::new()
-        .with_metrics_port(config.consumer.metrics_port)
-        .run_async();
+    let metrics = tokio::spawn(async move {
+        MetricsWarpBuilder::new()
+            .with_metrics_port(config.consumer.metrics_port)
+            .with_readiness_channel(readiness_channel)
+            .run_async()
+            .await
+    });
 
     select! {
         Err(err) = consumer =>
