@@ -15,7 +15,7 @@ pub struct InsertableAssetTicker {
     pub superseded_by: i64,
     pub block_uid: i64,
     pub asset_id: String,
-    pub ticker: String,
+    pub ticker: Option<String>,
 }
 
 impl PartialEq for InsertableAssetTicker {

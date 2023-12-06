@@ -103,25 +103,25 @@ pub struct AssetLabelsUpdate {
 #[derive(Debug)]
 pub struct AssetTickerUpdate {
     pub asset_id: String,
-    pub ticker: String,
+    pub ticker: Option<String>,
 }
 
 #[derive(Debug)]
 pub struct AssetExtTickerUpdate {
     pub asset_id: String,
-    pub ext_ticker: String,
+    pub ext_ticker: Option<String>,
 }
 
 #[derive(Debug)]
 pub struct AssetNameUpdate {
     pub asset_id: String,
-    pub asset_name: String,
+    pub asset_name: Option<String>,
 }
 
 #[derive(Debug)]
 pub struct AssetDescriptionUpdate {
     pub asset_id: String,
-    pub asset_description: String,
+    pub asset_description: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -219,14 +219,7 @@ where
         start = Instant::now();
 
         let changed_assets_ids = repo
-            .transaction(move |o| {
-                Ok(handle_updates(
-                    updates_with_height,
-                    o,
-                    chain_id,
-                    wwa,
-                )?)
-            })
+            .transaction(move |o| Ok(handle_updates(updates_with_height, o, chain_id, wwa)?))
             .await?;
 
         update_redis_cache_from_db(
@@ -1104,20 +1097,18 @@ fn extract_asset_name_updates(
                 if asset_storage_address == oracle_address && is_asset_name_data_entry(&de.key) {
                     match de.value.as_ref() {
                         Some(value) => match value {
-                            Value::StringValue(value)
-                                if asset_storage_address == oracle_address =>
-                            {
+                            Value::StringValue(value) => {
                                 frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetNameUpdate {
                                     asset_id,
-                                    asset_name: value.clone(),
+                                    asset_name: Some(value.clone()),
                                 })
                             }
                             _ => None,
                         },
-                        // key was deleted -> drop asset ticker
+                        // key was deleted -> drop asset name
                         None => frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetNameUpdate {
                             asset_id,
-                            asset_name: "".into(),
+                            asset_name: None,
                         }),
                     }
                 } else {
@@ -1144,23 +1135,21 @@ fn extract_asset_description_updates(
                 {
                     match de.value.as_ref() {
                         Some(value) => match value {
-                            Value::StringValue(value)
-                                if asset_storage_address == oracle_address =>
-                            {
+                            Value::StringValue(value) => {
                                 frag_parse!("%s%s", de.key).map(|(_, asset_id)| {
                                     AssetDescriptionUpdate {
                                         asset_id,
-                                        asset_description: value.clone(),
+                                        asset_description: Some(value.clone()),
                                     }
                                 })
                             }
                             _ => None,
                         },
-                        // key was deleted -> drop asset ticker
+                        // key was deleted -> drop asset descriptoon
                         None => frag_parse!("%s%s", de.key).map(|(_, asset_id)| {
                             AssetDescriptionUpdate {
                                 asset_id,
-                                asset_description: "".into(),
+                                asset_description: None,
                             }
                         }),
                     }
@@ -1186,12 +1175,10 @@ fn extract_asset_tickers_updates(
                 if asset_storage_address == oracle_address && is_asset_ticker_data_entry(&de.key) {
                     match de.value.as_ref() {
                         Some(value) => match value {
-                            Value::StringValue(value)
-                                if asset_storage_address == oracle_address =>
-                            {
+                            Value::StringValue(value) => {
                                 frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetTickerUpdate {
                                     asset_id,
-                                    ticker: value.clone(),
+                                    ticker: Some(value.clone()),
                                 })
                             }
                             _ => None,
@@ -1200,7 +1187,7 @@ fn extract_asset_tickers_updates(
                         None => {
                             frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetTickerUpdate {
                                 asset_id,
-                                ticker: "".into(),
+                                ticker: None,
                             })
                         }
                     }
@@ -1228,13 +1215,11 @@ fn extract_asset_ext_tickers_updates(
                 {
                     match de.value.as_ref() {
                         Some(value) => match value {
-                            Value::StringValue(value)
-                                if asset_storage_address == oracle_address =>
-                            {
+                            Value::StringValue(value) => {
                                 frag_parse!("%s%s", de.key).map(|(_, asset_id)| {
                                     AssetExtTickerUpdate {
                                         asset_id,
-                                        ext_ticker: value.clone(),
+                                        ext_ticker: Some(value.clone()),
                                     }
                                 })
                             }
@@ -1244,7 +1229,7 @@ fn extract_asset_ext_tickers_updates(
                         None => {
                             frag_parse!("%s%s", de.key).map(|(_, asset_id)| AssetExtTickerUpdate {
                                 asset_id,
-                                ext_ticker: "".into(),
+                                ext_ticker: None,
                             })
                         }
                     }
