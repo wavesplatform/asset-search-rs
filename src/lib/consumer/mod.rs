@@ -1145,7 +1145,7 @@ fn extract_asset_description_updates(
                             }
                             _ => None,
                         },
-                        // key was deleted -> drop asset descriptoon
+                        // key was deleted -> drop asset description
                         None => frag_parse!("%s%s", de.key).map(|(_, asset_id)| {
                             AssetDescriptionUpdate {
                                 asset_id,
