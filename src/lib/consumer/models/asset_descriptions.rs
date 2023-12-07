@@ -15,7 +15,7 @@ pub struct InsertableAssetDescription {
     pub superseded_by: i64,
     pub block_uid: i64,
     pub asset_id: String,
-    pub asset_description: String,
+    pub asset_description: Option<String>,
 }
 
 impl PartialEq for InsertableAssetDescription {
