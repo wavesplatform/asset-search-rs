@@ -154,7 +154,7 @@ impl TryFrom<BlockchainUpdatedPB> for BlockchainUpdate {
         match value.update {
             Some(UpdatePB::Append(AppendPB {
                 body,
-                state_update: Some(state_update),
+                state_update,
                 transaction_ids,
                 transactions_metadata,
                 transaction_state_updates,
@@ -194,6 +194,8 @@ impl TryFrom<BlockchainUpdatedPB> for BlockchainUpdate {
                         .collect(),
                     None => vec![],
                 };
+
+                let state_update = state_update.unwrap_or_default();
 
                 match body {
                     Some(BodyPB::Block(BlockAppendPB {
