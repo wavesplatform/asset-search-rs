@@ -13,7 +13,7 @@ use std::str;
 use std::time::Instant;
 use tokio::sync::mpsc::Receiver;
 use waves_protobuf_schemas::waves::{
-    data_transaction_data::data_entry::Value,
+    data_entry::Value,
     events::{StateUpdate, TransactionMetadata},
     signed_transaction::Transaction,
     SignedTransaction, Transaction as WavesTx,
