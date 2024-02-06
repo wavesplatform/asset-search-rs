@@ -13,13 +13,13 @@ bigdecimal = { version = "0.4", features = ["serde"] }
 blake2 = "0.10"
 bs58 = "0.5"
 bytes = "1.1"
-chrono = { version = "0.4", features = ["serde"] }
-diesel = { version = "2.0", default-features = false, features = ["chrono", "postgres", "r2d2"] }
+chrono = { version = "0.4", default-features = false, features = ["serde"] }
+diesel = { version = "2.1", default-features = false, features = ["chrono", "postgres", "r2d2"] }
 diesel-derive-enum = { version = "2.1", features = ["postgres"] }
-diesel_migrations = "2.0"
+diesel_migrations = "2.1"
 envy = "0.4"
 fragstrings = { git = "https://github.com/waves-exchange/fragstrings", tag = "v0.2.0", default-features = false, features = ["parse"] }
-futures = "0.3"
+futures = { version = "0.3", default-features = false }
 itertools = "0.12"
 lazy_static = "1.4"
 percent-encoding = "2.1"
