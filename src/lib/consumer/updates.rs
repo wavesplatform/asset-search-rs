@@ -41,7 +41,12 @@ pub struct UpdatesSourceImpl {
 
 pub async fn new(blockchain_updates_url: &str) -> Result<UpdatesSourceImpl> {
     Ok(UpdatesSourceImpl {
-        grpc_client: BlockchainUpdatesApiClient::connect(blockchain_updates_url.to_owned()).await?,
+        grpc_client: {
+            const MAX_MSG_SIZE: usize = 8 * 1024 * 1024; // 8 MB instead of the default 4 MB
+            BlockchainUpdatesApiClient::connect(blockchain_updates_url.to_owned())
+                .await?
+                .max_decoding_message_size(MAX_MSG_SIZE)
+        },
     })
 }
 
@@ -154,7 +159,7 @@ impl TryFrom<BlockchainUpdatedPB> for BlockchainUpdate {
         match value.update {
             Some(UpdatePB::Append(AppendPB {
                 body,
-                state_update: Some(state_update),
+                state_update,
                 transaction_ids,
                 transactions_metadata,
                 transaction_state_updates,
@@ -195,6 +200,8 @@ impl TryFrom<BlockchainUpdatedPB> for BlockchainUpdate {
                     None => vec![],
                 };
 
+                let state_update = state_update.unwrap_or_default();
+
                 match body {
                     Some(BodyPB::Block(BlockAppendPB {
                         block:
@@ -203,6 +210,7 @@ impl TryFrom<BlockchainUpdatedPB> for BlockchainUpdate {
                                 ..
                             }),
                         updated_waves_amount,
+                        ..
                     })) => Ok(Block(BlockMicroblockAppend {
                         id: bs58::encode(&value.id).into_string(),
                         time_stamp: Some(timestamp),
